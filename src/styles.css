@@ -884,24 +884,25 @@ button:disabled {
 
 .request-simulator {
   width: min(608px, calc(100vw - 44px));
-  min-height: 112px;
-  display: grid;
-  grid-template-columns: 104px 136px 132px 72px 62px 32px;
-  align-items: end;
-  gap: 7px;
-  padding: 7px;
+  min-height: 0;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: color-mix(in srgb, var(--panel) 94%, var(--bg));
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.20);
 }
 
+.simulator-collapse {
+  display: block;
+}
+
 .simulator-title {
-  height: 30px;
-  width: 104px;
-  display: inline-flex;
+  position: relative;
+  width: 100%;
+  min-height: 38px;
+  display: flex;
   align-items: center;
-  padding-inline: 2px 6px;
+  padding: 8px 30px 8px 10px;
   color: var(--text);
   font-size: 11px;
   font-weight: 700;
@@ -909,6 +910,40 @@ button:disabled {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+  list-style: none;
+}
+
+.simulator-title::-webkit-details-marker {
+  display: none;
+}
+
+.simulator-title::after {
+  content: "▾";
+  position: absolute;
+  inset-inline-end: 10px;
+  color: var(--muted);
+  transform: rotate(-90deg);
+  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.simulator-collapse[open] .simulator-title::after {
+  transform: rotate(0);
+}
+
+.simulator-title:hover,
+.simulator-title:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.simulator-fields {
+  min-height: 112px;
+  display: grid;
+  grid-template-columns: 104px 136px 132px 72px 62px 32px;
+  align-items: end;
+  gap: 7px;
+  padding: 0 7px 7px;
 }
 
 .request-suggestion {
@@ -997,55 +1032,10 @@ button:disabled {
 .simulation-outcome {
   grid-column: 1 / -1;
   min-width: 0;
-  padding: 0;
+  padding: 8px 9px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: color-mix(in srgb, var(--panel-2) 86%, var(--bg));
-}
-
-.simulation-outcome__summary {
-  position: relative;
-  display: grid;
-  gap: 5px;
-  padding: 8px 9px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.simulation-outcome__summary::-webkit-details-marker {
-  display: none;
-}
-
-.simulation-outcome__summary::before {
-  content: "▸";
-  position: absolute;
-  inset-inline-end: 9px;
-  color: var(--muted);
-  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.simulation-outcome[open] .simulation-outcome__summary::before {
-  transform: rotate(90deg);
-}
-
-.simulation-outcome__summary:hover,
-.simulation-outcome__summary:focus-visible {
-  outline: none;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-
-.simulation-outcome__summary-copy {
-  padding-inline-end: 18px;
-  color: var(--text);
-  font-size: 12px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.simulation-outcome__body {
-  min-width: 0;
-  padding: 0 9px 8px;
-  border-top: 1px solid var(--line);
 }
 
 .simulation-outcome__label {
@@ -1483,7 +1473,6 @@ button:disabled {
 
   .request-simulator {
     width: min(608px, calc(100vw - 28px));
-    align-items: end;
   }
 
   .menu-action-label {
@@ -1572,14 +1561,12 @@ button:disabled {
   .request-simulator {
     inset-inline: 8px auto;
     width: calc(100vw - 32px);
+  }
+
+  .simulator-fields {
     min-height: 166px;
     grid-template-columns: 104px minmax(0, 1fr) 72px 62px 32px;
     grid-template-rows: 45px 45px auto;
-  }
-
-  .simulator-title {
-    grid-column: 1;
-    grid-row: 1;
   }
 
   .request-simulator label:nth-of-type(1) {

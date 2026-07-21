@@ -781,120 +781,124 @@ function Workspace() {
             </ControlButton>
           </Controls>
           <Panel position="top-left" className="request-simulator" aria-label={text.simulator}>
-            <div className="simulator-title">
-              <span>{text.simulator}</span>
-            </div>
-            <label className="request-suggestion">
-              <span>{text.requestSuggestion}</span>
-              <select
-                aria-label={text.requestSuggestion}
-                value=""
-                onChange={(event) => {
-                  const suggestion = requestSuggestions.find((candidate) => JSON.stringify(candidate) === event.target.value);
-                  if (!suggestion) return;
-                  requestInputTouchedRef.current = true;
-                  setSimulationInput(suggestion);
-                  setSimulationPort(suggestion.port ? String(suggestion.port) : "");
-                }}
-              >
-                <option value="">{text.requestSuggestionPlaceholder}</option>
-                {requestSuggestions.map((suggestion) => (
-                  <option key={JSON.stringify(suggestion)} value={JSON.stringify(suggestion)}>
-                    {suggestion.host || "(any host)"}{suggestion.path} · {suggestion.scheme}:{suggestion.port}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>{text.host}</span>
-              <input
-                value={simulationInput.host}
-                ref={requestHostRef}
-                aria-label={text.host}
-                placeholder={text.hostPlaceholder}
-                title={text.hostPlaceholder}
-                onChange={(event) => {
-                  requestInputTouchedRef.current = true;
-                  setSimulationInput((value) => ({ ...value, host: event.target.value.trim() }));
-                }}
-              />
-            </label>
-            <label>
-              <span>{text.path}</span>
-              <input
-                value={simulationInput.path}
-                aria-label={text.path}
-                aria-describedby={simulationPathHelp ? "simulation-path-help" : undefined}
-                onChange={(event) => {
-                  requestInputTouchedRef.current = true;
-                  setSimulationInput((value) => ({ ...value, path: event.target.value }));
-                }}
-              />
-            </label>
-            <label>
-              <span>{text.scheme}</span>
-              <select
-                value={simulationInput.scheme}
-                aria-label={text.scheme}
-                onChange={(event) => {
-                  requestInputTouchedRef.current = true;
-                  const scheme = event.target.value as RequestSimulationInput["scheme"];
-                  setSimulationPort((port) => {
-                    if (scheme === "https" && port === "80") return "443";
-                    if (scheme === "http" && port === "443") return "80";
-                    return port;
-                  });
-                  setSimulationInput((value) => ({
-                    ...value,
-                    scheme,
-                    port: scheme === "https" && value.port === 80 ? 443 : scheme === "http" && value.port === 443 ? 80 : value.port
-                  }));
-                }}
-              >
-                <option value="http">http</option>
-                <option value="https">https</option>
-              </select>
-            </label>
-            <label className="simulator-port">
-              <span>{text.port}</span>
-              <input
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={simulationPort}
-                aria-label={text.port}
-                onChange={(event) => {
-                  requestInputTouchedRef.current = true;
-                  const { displayValue, port } = parsePortInput(event.target.value);
-                  setSimulationPort(displayValue);
-                  setSimulationInput((value) => ({ ...value, port }));
-                }}
-              />
-            </label>
-            <button
-              type="button"
-              aria-label={text.simulate}
-              title={text.simulate}
-              aria-pressed={simulationEnabled}
-              className="simulator-live-toggle"
-              onClick={() => {
-                setSimulationEnabled((enabled) => {
-                  const next = !enabled;
-                  setStatusMessage(next ? text.simulationOn : text.simulationOff);
-                  return next;
-                });
-              }}
-            >
-              {simulationEnabled ? <Pause size={14} /> : <Play size={14} />}
-              <span className="sr-only">{simulationEnabled ? text.simulationOn : text.simulationOff}</span>
-            </button>
-            <SimulationOutcome
-              simulation={simulation}
-              enabled={simulationEnabled}
-              language={language}
-              pathHelp={simulationPathHelp}
-              incomplete={graph.issues.some((issue) => issue.source === "parse")}
-              onStepClick={focusRouteStep}
-            />
+            <details className="simulator-collapse" open>
+              <summary className="simulator-title">
+                <span>{text.simulator}</span>
+              </summary>
+              <div className="simulator-fields">
+                <label className="request-suggestion">
+                  <span>{text.requestSuggestion}</span>
+                  <select
+                    aria-label={text.requestSuggestion}
+                    value=""
+                    onChange={(event) => {
+                      const suggestion = requestSuggestions.find((candidate) => JSON.stringify(candidate) === event.target.value);
+                      if (!suggestion) return;
+                      requestInputTouchedRef.current = true;
+                      setSimulationInput(suggestion);
+                      setSimulationPort(suggestion.port ? String(suggestion.port) : "");
+                    }}
+                  >
+                    <option value="">{text.requestSuggestionPlaceholder}</option>
+                    {requestSuggestions.map((suggestion) => (
+                      <option key={JSON.stringify(suggestion)} value={JSON.stringify(suggestion)}>
+                        {suggestion.host || "(any host)"}{suggestion.path} · {suggestion.scheme}:{suggestion.port}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>{text.host}</span>
+                  <input
+                    value={simulationInput.host}
+                    ref={requestHostRef}
+                    aria-label={text.host}
+                    placeholder={text.hostPlaceholder}
+                    title={text.hostPlaceholder}
+                    onChange={(event) => {
+                      requestInputTouchedRef.current = true;
+                      setSimulationInput((value) => ({ ...value, host: event.target.value.trim() }));
+                    }}
+                  />
+                </label>
+                <label>
+                  <span>{text.path}</span>
+                  <input
+                    value={simulationInput.path}
+                    aria-label={text.path}
+                    aria-describedby={simulationPathHelp ? "simulation-path-help" : undefined}
+                    onChange={(event) => {
+                      requestInputTouchedRef.current = true;
+                      setSimulationInput((value) => ({ ...value, path: event.target.value }));
+                    }}
+                  />
+                </label>
+                <label>
+                  <span>{text.scheme}</span>
+                  <select
+                    value={simulationInput.scheme}
+                    aria-label={text.scheme}
+                    onChange={(event) => {
+                      requestInputTouchedRef.current = true;
+                      const scheme = event.target.value as RequestSimulationInput["scheme"];
+                      setSimulationPort((port) => {
+                        if (scheme === "https" && port === "80") return "443";
+                        if (scheme === "http" && port === "443") return "80";
+                        return port;
+                      });
+                      setSimulationInput((value) => ({
+                        ...value,
+                        scheme,
+                        port: scheme === "https" && value.port === 80 ? 443 : scheme === "http" && value.port === 443 ? 80 : value.port
+                      }));
+                    }}
+                  >
+                    <option value="http">http</option>
+                    <option value="https">https</option>
+                  </select>
+                </label>
+                <label className="simulator-port">
+                  <span>{text.port}</span>
+                  <input
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={simulationPort}
+                    aria-label={text.port}
+                    onChange={(event) => {
+                      requestInputTouchedRef.current = true;
+                      const { displayValue, port } = parsePortInput(event.target.value);
+                      setSimulationPort(displayValue);
+                      setSimulationInput((value) => ({ ...value, port }));
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  aria-label={text.simulate}
+                  title={text.simulate}
+                  aria-pressed={simulationEnabled}
+                  className="simulator-live-toggle"
+                  onClick={() => {
+                    setSimulationEnabled((enabled) => {
+                      const next = !enabled;
+                      setStatusMessage(next ? text.simulationOn : text.simulationOff);
+                      return next;
+                    });
+                  }}
+                >
+                  {simulationEnabled ? <Pause size={14} /> : <Play size={14} />}
+                  <span className="sr-only">{simulationEnabled ? text.simulationOn : text.simulationOff}</span>
+                </button>
+                <SimulationOutcome
+                  simulation={simulation}
+                  enabled={simulationEnabled}
+                  language={language}
+                  pathHelp={simulationPathHelp}
+                  incomplete={graph.issues.some((issue) => issue.source === "parse")}
+                  onStepClick={focusRouteStep}
+                />
+              </div>
+            </details>
           </Panel>
           <Panel position="top-right" className="canvas-actions">
             <button
@@ -1138,57 +1142,53 @@ function SimulationOutcome({ simulation, enabled, language, pathHelp, incomplete
   const confidence = text.confidenceValue[simulation.confidence];
   const reason = simulation.reasons.find((item) => item !== simulation.summary) || simulation.reasons[0] || "";
   return (
-    <details className={`simulation-outcome simulation-outcome--${simulation.status} confidence-${simulation.confidence}`} aria-label={text.simulationResult} open>
-      <summary className="simulation-outcome__summary">
-        <div className="simulation-outcome__label">
-          <span>{enabled ? text.simulationResult : text.simulate}</span>
-          <strong>{text.simulationConfidence}: {confidence}</strong>
-        </div>
-        <span className="simulation-outcome__summary-copy">{translateSimulation(simulation.summary, language)}</span>
-      </summary>
-      <div className="simulation-outcome__body">
-        <div className="simulation-outcome__meta">
-          <span>{translateSimulation(reason, language)}</span>
-          {(simulation.confidence !== "high" || pathHelp) ? (
-            <span id={pathHelp ? "simulation-path-help" : undefined}>{pathHelp || text.simulationUnavailable}</span>
-          ) : null}
-        </div>
-        {incomplete ? <p className="simulation-incomplete" role="alert">{text.incompleteResult}</p> : null}
-        {simulation.candidates.length > 1 ? (
-          <div className="route-candidates">
-            <strong>{text.candidateRoutes} · {text.candidateCount(simulation.candidates.length)}</strong>
-            <ol>
-              {simulation.candidates.map((candidate) => (
-                <li key={candidate.id} className={`route-candidate route-candidate--${candidate.status}`}>
-                  <span>{translateSimulation(candidate.summary, language)}</span>
-                  <span className="route-candidate__confidence">{text.simulationConfidence}: {text.confidenceValue[candidate.confidence]}</span>
-                  <small>{candidate.reasons.map((candidateReason) => translateSimulation(candidateReason, language)).join(" · ")}</small>
-                </li>
-              ))}
-            </ol>
-          </div>
-        ) : null}
-        {simulation.steps.length > 0 ? (
-          <div className="route-trace" aria-label={text.routeTrace}>
-            <strong>{text.routeTrace}</strong>
-            <ol>
-              {simulation.steps.map((step) => (
-                <li key={step.id} className={`route-trace__step route-trace__step--${step.status}`}>
-                  <button type="button" onClick={() => onStepClick(step)} title={text.clickTraceStep}>
-                    <span className="route-trace__kind">{translateRouteStepKind(step.kind, language)}</span>
-                    <span>{step.label}</span>
-                  </button>
-                  <small>
-                    {translateSimulation(step.reason, language)}
-                    {step.source ? ` · ${formatLocation(step.source.line, step.source.file, language)}` : ""}
-                  </small>
-                </li>
-              ))}
-            </ol>
-          </div>
+    <section className={`simulation-outcome simulation-outcome--${simulation.status} confidence-${simulation.confidence}`} aria-label={text.simulationResult}>
+      <div className="simulation-outcome__label">
+        <span>{enabled ? text.simulationResult : text.simulate}</span>
+        <strong>{text.simulationConfidence}: {confidence}</strong>
+      </div>
+      <p>{translateSimulation(simulation.summary, language)}</p>
+      <div className="simulation-outcome__meta">
+        <span>{translateSimulation(reason, language)}</span>
+        {(simulation.confidence !== "high" || pathHelp) ? (
+          <span id={pathHelp ? "simulation-path-help" : undefined}>{pathHelp || text.simulationUnavailable}</span>
         ) : null}
       </div>
-    </details>
+      {incomplete ? <p className="simulation-incomplete" role="alert">{text.incompleteResult}</p> : null}
+      {simulation.candidates.length > 1 ? (
+        <div className="route-candidates">
+          <strong>{text.candidateRoutes} · {text.candidateCount(simulation.candidates.length)}</strong>
+          <ol>
+            {simulation.candidates.map((candidate) => (
+              <li key={candidate.id} className={`route-candidate route-candidate--${candidate.status}`}>
+                <span>{translateSimulation(candidate.summary, language)}</span>
+                <span className="route-candidate__confidence">{text.simulationConfidence}: {text.confidenceValue[candidate.confidence]}</span>
+                <small>{candidate.reasons.map((candidateReason) => translateSimulation(candidateReason, language)).join(" · ")}</small>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+      {simulation.steps.length > 0 ? (
+        <div className="route-trace" aria-label={text.routeTrace}>
+          <strong>{text.routeTrace}</strong>
+          <ol>
+            {simulation.steps.map((step) => (
+              <li key={step.id} className={`route-trace__step route-trace__step--${step.status}`}>
+                <button type="button" onClick={() => onStepClick(step)} title={text.clickTraceStep}>
+                  <span className="route-trace__kind">{translateRouteStepKind(step.kind, language)}</span>
+                  <span>{step.label}</span>
+                </button>
+                <small>
+                  {translateSimulation(step.reason, language)}
+                  {step.source ? ` · ${formatLocation(step.source.line, step.source.file, language)}` : ""}
+                </small>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+    </section>
   );
 }
 

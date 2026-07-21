@@ -8,13 +8,13 @@ test("keeps the configuration editor visible", async ({ page }) => {
   await expect.poll(async () => editor.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThan(100);
 });
 
-test("allows the route result to collapse", async ({ page }) => {
+test("allows the request route simulator to collapse", async ({ page }) => {
   await page.goto("/");
 
-  const routeResult = page.locator("details.simulation-outcome");
-  await expect(routeResult).toHaveAttribute("open", "");
+  const simulator = page.locator("details.simulator-collapse");
+  await expect(simulator).toHaveAttribute("open", "");
 
-  await routeResult.locator("summary").click();
+  await simulator.locator("summary").click();
 
-  await expect(routeResult).not.toHaveAttribute("open", "");
+  await expect(simulator).not.toHaveAttribute("open", "");
 });
