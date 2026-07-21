@@ -70,6 +70,8 @@ const copy = {
     routeIssues: "Route issues",
     allIssues: "All issues",
     clickTraceStep: "Inspect this route step",
+    requestSuggestion: "Try a request from config",
+    requestSuggestionPlaceholder: "Choose a configured route",
     host: "Host",
     hostPlaceholder: "server_name, e.g. example.com",
     path: "Path",
@@ -152,6 +154,8 @@ const copy = {
     routeIssues: "当前路径问题",
     allIssues: "全部问题",
     clickTraceStep: "查看此路由步骤",
+    requestSuggestion: "从配置选择请求",
+    requestSuggestionPlaceholder: "选择可尝试的路由",
     host: "主机",
     hostPlaceholder: "server_name，例如 example.com",
     path: "路径",
@@ -523,7 +527,7 @@ function Workspace() {
       setSelectedEdgeId(undefined);
     }
     focusIssueLine(issue.loc.line);
-  }, [focusIssueLine, graph.nodes]);
+  }, [focusIssueLine, graph.edges, graph.nodes]);
 
   const focusRouteStep = useCallback((step: RequestRouteStep) => {
     const node = step.nodeId ? graph.nodes.find((candidate) => candidate.id === step.nodeId) : undefined;
@@ -538,7 +542,7 @@ function Workspace() {
       setSelectedEdgeId(undefined);
     }
     if (step.source) focusIssueLine(step.source.line);
-  }, [focusIssueLine, graph.nodes]);
+  }, [focusIssueLine, graph.edges, graph.nodes]);
 
   useEffect(() => {
     const onShortcut = (event: KeyboardEvent) => {
@@ -573,11 +577,11 @@ function Workspace() {
     return () => document.removeEventListener("keydown", onShortcut);
   }, [fitView, focusIssue, text.shortcutsHelp, visibleIssues]);
 
-  const onIssueKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>, line: number) => {
+  const onIssueKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>, issue: ConfigIssue) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    focusIssueLine(line);
-  }, [focusIssueLine]);
+    focusIssue(issue);
+  }, [focusIssue]);
 
   return (
     <div
@@ -713,7 +717,7 @@ function Workspace() {
                       type="button"
                       className={`issue-item issue-item--${issue.severity}`}
                       onClick={() => focusIssue(issue)}
-                      onKeyDown={(event) => onIssueKeyDown(event, issue.loc.line)}
+                      onKeyDown={(event) => onIssueKeyDown(event, issue)}
                       title={language === "zh" ? `定位到第 ${issue.loc.line} 行` : `Jump to line ${issue.loc.line}`}
                     >
                       <span className="issue-item__message">
@@ -780,6 +784,27 @@ function Workspace() {
             <div className="simulator-title">
               <span>{text.simulator}</span>
             </div>
+            <label className="request-suggestion">
+              <span>{text.requestSuggestion}</span>
+              <select
+                aria-label={text.requestSuggestion}
+                value=""
+                onChange={(event) => {
+                  const suggestion = requestSuggestions.find((candidate) => JSON.stringify(candidate) === event.target.value);
+                  if (!suggestion) return;
+                  requestInputTouchedRef.current = true;
+                  setSimulationInput(suggestion);
+                  setSimulationPort(suggestion.port ? String(suggestion.port) : "");
+                }}
+              >
+                <option value="">{text.requestSuggestionPlaceholder}</option>
+                {requestSuggestions.map((suggestion) => (
+                  <option key={JSON.stringify(suggestion)} value={JSON.stringify(suggestion)}>
+                    {suggestion.host || "(any host)"}{suggestion.path} · {suggestion.scheme}:{suggestion.port}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label>
               <span>{text.host}</span>
               <input

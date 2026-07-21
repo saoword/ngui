@@ -909,6 +909,14 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
+.request-suggestion {
+  grid-column: 1 / -1;
+}
+
+.request-suggestion select {
+  width: 100%;
+}
+
 .request-simulator label {
   display: grid;
   gap: 3px;

@@ -32,6 +32,7 @@ describe("App accessibility and interaction states", () => {
     expect(screen.getByRole("textbox", { name: "主机" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "路径" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "端口" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "从配置选择请求" })).toBeInTheDocument();
     expect(screen.getByLabelText("上传 Nginx 配置")).toHaveAttribute("type", "file");
     expect(screen.getByText("上传")).toBeInTheDocument();
     expect(screen.getByText("示例")).toBeInTheDocument();
