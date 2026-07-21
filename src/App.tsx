@@ -1138,53 +1138,57 @@ function SimulationOutcome({ simulation, enabled, language, pathHelp, incomplete
   const confidence = text.confidenceValue[simulation.confidence];
   const reason = simulation.reasons.find((item) => item !== simulation.summary) || simulation.reasons[0] || "";
   return (
-    <section className={`simulation-outcome simulation-outcome--${simulation.status} confidence-${simulation.confidence}`} aria-label={text.simulationResult}>
-      <div className="simulation-outcome__label">
-        <span>{enabled ? text.simulationResult : text.simulate}</span>
-        <strong>{text.simulationConfidence}: {confidence}</strong>
-      </div>
-      <p>{translateSimulation(simulation.summary, language)}</p>
-      <div className="simulation-outcome__meta">
-        <span>{translateSimulation(reason, language)}</span>
-        {(simulation.confidence !== "high" || pathHelp) ? (
-          <span id={pathHelp ? "simulation-path-help" : undefined}>{pathHelp || text.simulationUnavailable}</span>
+    <details className={`simulation-outcome simulation-outcome--${simulation.status} confidence-${simulation.confidence}`} aria-label={text.simulationResult} open>
+      <summary className="simulation-outcome__summary">
+        <div className="simulation-outcome__label">
+          <span>{enabled ? text.simulationResult : text.simulate}</span>
+          <strong>{text.simulationConfidence}: {confidence}</strong>
+        </div>
+        <span className="simulation-outcome__summary-copy">{translateSimulation(simulation.summary, language)}</span>
+      </summary>
+      <div className="simulation-outcome__body">
+        <div className="simulation-outcome__meta">
+          <span>{translateSimulation(reason, language)}</span>
+          {(simulation.confidence !== "high" || pathHelp) ? (
+            <span id={pathHelp ? "simulation-path-help" : undefined}>{pathHelp || text.simulationUnavailable}</span>
+          ) : null}
+        </div>
+        {incomplete ? <p className="simulation-incomplete" role="alert">{text.incompleteResult}</p> : null}
+        {simulation.candidates.length > 1 ? (
+          <div className="route-candidates">
+            <strong>{text.candidateRoutes} · {text.candidateCount(simulation.candidates.length)}</strong>
+            <ol>
+              {simulation.candidates.map((candidate) => (
+                <li key={candidate.id} className={`route-candidate route-candidate--${candidate.status}`}>
+                  <span>{translateSimulation(candidate.summary, language)}</span>
+                  <span className="route-candidate__confidence">{text.simulationConfidence}: {text.confidenceValue[candidate.confidence]}</span>
+                  <small>{candidate.reasons.map((candidateReason) => translateSimulation(candidateReason, language)).join(" · ")}</small>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+        {simulation.steps.length > 0 ? (
+          <div className="route-trace" aria-label={text.routeTrace}>
+            <strong>{text.routeTrace}</strong>
+            <ol>
+              {simulation.steps.map((step) => (
+                <li key={step.id} className={`route-trace__step route-trace__step--${step.status}`}>
+                  <button type="button" onClick={() => onStepClick(step)} title={text.clickTraceStep}>
+                    <span className="route-trace__kind">{translateRouteStepKind(step.kind, language)}</span>
+                    <span>{step.label}</span>
+                  </button>
+                  <small>
+                    {translateSimulation(step.reason, language)}
+                    {step.source ? ` · ${formatLocation(step.source.line, step.source.file, language)}` : ""}
+                  </small>
+                </li>
+              ))}
+            </ol>
+          </div>
         ) : null}
       </div>
-      {incomplete ? <p className="simulation-incomplete" role="alert">{text.incompleteResult}</p> : null}
-      {simulation.candidates.length > 1 ? (
-        <div className="route-candidates">
-          <strong>{text.candidateRoutes} · {text.candidateCount(simulation.candidates.length)}</strong>
-          <ol>
-            {simulation.candidates.map((candidate) => (
-              <li key={candidate.id} className={`route-candidate route-candidate--${candidate.status}`}>
-                <span>{translateSimulation(candidate.summary, language)}</span>
-                <span className="route-candidate__confidence">{text.simulationConfidence}: {text.confidenceValue[candidate.confidence]}</span>
-                <small>{candidate.reasons.map((candidateReason) => translateSimulation(candidateReason, language)).join(" · ")}</small>
-              </li>
-            ))}
-          </ol>
-        </div>
-      ) : null}
-      {simulation.steps.length > 0 ? (
-        <div className="route-trace" aria-label={text.routeTrace}>
-          <strong>{text.routeTrace}</strong>
-          <ol>
-            {simulation.steps.map((step) => (
-              <li key={step.id} className={`route-trace__step route-trace__step--${step.status}`}>
-                <button type="button" onClick={() => onStepClick(step)} title={text.clickTraceStep}>
-                  <span className="route-trace__kind">{translateRouteStepKind(step.kind, language)}</span>
-                  <span>{step.label}</span>
-                </button>
-                <small>
-                  {translateSimulation(step.reason, language)}
-                  {step.source ? ` · ${formatLocation(step.source.line, step.source.file, language)}` : ""}
-                </small>
-              </li>
-            ))}
-          </ol>
-        </div>
-      ) : null}
-    </section>
+    </details>
   );
 }
 
