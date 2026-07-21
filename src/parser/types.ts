@@ -40,6 +40,8 @@ export interface ConfigIssue {
   messageKey: string;
   params?: Record<string, string | number>;
   loc: SourceLocation;
+  relatedNodeIds?: string[];
+  relatedEdgeIds?: string[];
   suggestionKey?: string;
   source: "parse" | "check";
 }
@@ -90,6 +92,7 @@ export interface TopologyEdge {
   target: string;
   type: TopologyEdgeType;
   label?: string;
+  sourceLocation?: SourceLocation;
   sourceRaw?: string;
 }
 
@@ -105,6 +108,8 @@ export interface RoutingListen {
   port?: number;
   ssl: boolean;
   nodeId?: string;
+  source?: SourceLocation;
+  raw?: string;
 }
 
 export interface RoutingLocation extends LocationMatchInfo {
@@ -123,6 +128,8 @@ export interface RoutingServer {
   names: string[];
   listens: RoutingListen[];
   locations: RoutingLocation[];
+  source?: SourceLocation;
+  raw?: string;
 }
 
 export interface RoutingModel {
@@ -136,6 +143,39 @@ export interface RequestSimulationInput {
   port?: number;
 }
 
+export type RequestRouteStepKind =
+  | "request"
+  | "server"
+  | "location"
+  | "entry"
+  | "route"
+  | "upstream"
+  | "target"
+  | "variable"
+  | "unknown";
+
+export interface RequestRouteStep {
+  id: string;
+  kind: RequestRouteStepKind;
+  label: string;
+  reason: string;
+  status: "matched" | "candidate" | "unknown" | "not-found";
+  nodeId?: string;
+  edgeId?: string;
+  source?: SourceLocation;
+}
+
+export interface RequestRouteCandidate {
+  id: string;
+  status: RequestSimulationResult["status"];
+  confidence: "high" | "medium" | "low";
+  summary: string;
+  reasons: string[];
+  steps: RequestRouteStep[];
+  nodeIds: string[];
+  edgeIds: string[];
+}
+
 export interface RequestSimulationResult {
   status: "matched" | "no-server" | "no-location";
   confidence: "high" | "medium" | "low";
@@ -143,6 +183,8 @@ export interface RequestSimulationResult {
   edgeIds: string[];
   summary: string;
   reasons: string[];
+  steps: RequestRouteStep[];
+  candidates: RequestRouteCandidate[];
   serverId?: string;
   locationId?: string;
 }

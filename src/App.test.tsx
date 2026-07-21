@@ -20,6 +20,7 @@ vi.mock("html-to-image", () => ({ toPng: vi.fn() }));
 describe("App accessibility and interaction states", () => {
   afterEach(() => {
     cleanup();
+    window.localStorage.clear();
     vi.useRealTimers();
   });
 
@@ -34,6 +35,7 @@ describe("App accessibility and interaction states", () => {
     expect(screen.getByLabelText("上传 Nginx 配置")).toHaveAttribute("type", "file");
     expect(screen.getByText("上传")).toBeInTheDocument();
     expect(screen.getByText("示例")).toBeInTheDocument();
+    expect(screen.getByText("示例配置")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导出拓扑 JSON" })).toBeInTheDocument();
     expect(screen.getByText("JSON")).toBeInTheDocument();
     expect(screen.getByText("PNG")).toBeInTheDocument();
@@ -228,8 +230,7 @@ describe("App accessibility and interaction states", () => {
     vi.useFakeTimers();
     render(<App />);
 
-    expect(screen.getAllByText("开启实时模拟后，预览可能命中的 Nginx 路由。").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "实时模拟" }));
+    expect(screen.getAllByText("路由追踪").length).toBeGreaterThan(0);
     fireEvent.change(screen.getByRole("textbox", { name: "路径" }), { target: { value: "/grpc" } });
     act(() => {
       vi.advanceTimersByTime(200);
@@ -243,7 +244,6 @@ describe("App accessibility and interaction states", () => {
     vi.useFakeTimers();
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "实时模拟" }));
     const port = screen.getByRole("textbox", { name: "端口" }) as HTMLInputElement;
     fireEvent.change(port, { target: { value: "" } });
     act(() => {
@@ -252,5 +252,19 @@ describe("App accessibility and interaction states", () => {
 
     expect(port.value).toBe("");
     expect(screen.getAllByText("输入端口后才能模拟请求路由。").length).toBeGreaterThan(0);
+  });
+
+  it("makes route trace steps actionable in the source editor", () => {
+    render(<App />);
+
+    const trace = document.querySelector(".route-trace");
+    expect(trace).toBeInTheDocument();
+    const steps = trace?.querySelectorAll("button") || [];
+    expect(steps.length).toBeGreaterThanOrEqual(3);
+
+    fireEvent.click(steps[2]);
+
+    expect(screen.getByRole("textbox", { name: "Nginx 配置" })).toHaveFocus();
+    expect(document.querySelector(".code-line-active")).toBeInTheDocument();
   });
 });

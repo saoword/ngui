@@ -315,7 +315,7 @@ button:disabled {
 .panel-content {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -480,6 +480,24 @@ button:disabled {
   font-size: 11px;
 }
 
+.issues-scope-toggle {
+  min-height: 24px;
+  margin-inline-start: auto;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--muted);
+  background: var(--button);
+  font-size: 10px;
+}
+
+.issues-scope-toggle:hover,
+.issues-scope-toggle:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: none;
+}
+
 .issues-scroll {
   min-height: 0;
   overflow: auto;
@@ -593,6 +611,29 @@ button:disabled {
 .config-textarea-area {
   min-height: 0;
   height: 100%;
+}
+
+.config-origin {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.config-origin strong {
+  flex: 0 0 auto;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.config-origin span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .code-editor {
@@ -984,6 +1025,111 @@ button:disabled {
   gap: 6px 10px;
   color: var(--muted);
   font-size: 11px;
+  line-height: 1.3;
+}
+
+.route-trace {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+
+.route-trace > strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.route-trace ol {
+  display: grid;
+  gap: 3px;
+  margin: 5px 0 0;
+  padding: 0 0 0 18px;
+}
+
+.route-trace__step {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.route-trace__step button {
+  width: 100%;
+  min-width: 0;
+  padding: 3px 4px;
+  border: 0;
+  border-radius: 4px;
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+}
+
+.route-trace__step button:hover,
+.route-trace__step button:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.route-trace__kind {
+  flex: 0 0 auto;
+  color: var(--accent-2);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.route-trace__step small {
+  display: block;
+  margin: 0 4px 2px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.route-trace__step--not-found {
+  color: var(--warn);
+}
+
+.route-trace__step--not-found .route-trace__kind {
+  color: var(--warn);
+}
+
+.simulation-incomplete {
+  color: var(--danger) !important;
+}
+
+.route-candidates {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+  color: var(--text);
+  font-size: 11px;
+}
+
+.route-candidates ol {
+  display: grid;
+  gap: 5px;
+  margin: 5px 0 0;
+  padding-left: 18px;
+}
+
+.route-candidate {
+  display: grid;
+  gap: 2px;
+  color: var(--text);
+}
+
+.route-candidate--no-location {
+  color: var(--warn);
+}
+
+.route-candidate__confidence,
+.route-candidate small {
+  color: var(--muted);
+  font-size: 10px;
   line-height: 1.3;
 }
 

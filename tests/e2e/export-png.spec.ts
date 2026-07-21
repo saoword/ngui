@@ -6,7 +6,7 @@ test("exports topology PNG with visible edge paths", async ({ page }) => {
   await page.waitForSelector("path.react-flow__edge-path:not(.dimmed-edge)");
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "导出拓扑 PNG" }).click();
+  await page.getByRole("button", { name: /导出拓扑 PNG|Export topology as PNG/ }).click();
   const download = await downloadPromise;
   const filePath = await download.path();
   expect(filePath).toBeTruthy();
@@ -48,5 +48,6 @@ test("exports topology PNG with visible edge paths", async ({ page }) => {
 
   expect(result.width).toBeGreaterThan(1000);
   expect(result.height).toBeGreaterThan(800);
-  expect(result.edgeColorPixels).toBeGreaterThan(500);
+  // Default request mode dims unrelated paths; assert exported highlighted paths remain visible.
+  expect(result.edgeColorPixels).toBeGreaterThan(20);
 });

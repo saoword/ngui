@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import ReactFlow, { Background, ControlButton, Controls, MiniMap, Panel, ReactFlowProvider, useReactFlow, applyNodeChanges, type Edge, type Node, type OnNodesChange } from "reactflow";
 import "reactflow/dist/style.css";
-import { Download, FileJson, Github, Languages, Maximize, Maximize2, Minimize, Moon, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCcw, RefreshCw, Search, Sun, Upload } from "lucide-react";
+import { Copy, Download, FileJson, Github, Languages, Maximize, Maximize2, Minimize, Moon, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCcw, RefreshCw, Search, Sun, Upload } from "lucide-react";
 import { toPng } from "html-to-image";
-import { buildTopology, simulateRequest, type ConfigIssue, type IssueSeverity, type RequestSimulationInput, type RequestSimulationResult, type TopologyEdge, type TopologyGraph, type TopologyNode } from "./parser";
+import { buildTopology, simulateRequest, suggestRequestInputs, type ConfigIssue, type IssueSeverity, type RequestSimulationInput, type RequestSimulationResult, type RequestRouteStep, type TopologyEdge, type TopologyGraph, type TopologyNode } from "./parser";
 import { sampleConfig } from "./sampleConfig";
 import { NginxNode } from "./components/NginxNode";
 import { LaneGroup } from "./components/LaneGroup";
@@ -34,6 +34,10 @@ const copy = {
     exportPng: "Export topology as PNG",
     exportJsonShort: "JSON",
     exportPngShort: "PNG",
+    copyTrace: "Copy route trace",
+    copyTraceShort: "Copy",
+    traceCopied: "Copied route trace",
+    traceCopyFailed: "Could not copy route trace.",
     lightThemeShort: "Light",
     darkThemeShort: "Dark",
     enterFullscreen: "Enter fullscreen",
@@ -60,6 +64,12 @@ const copy = {
     clearSelection: "Clear topology selection",
     updating: "Updating topology...",
     simulator: "Request route simulation",
+    routeTrace: "Route trace",
+    showAllIssues: "Show all issues",
+    showRouteIssues: "Show route issues",
+    routeIssues: "Route issues",
+    allIssues: "All issues",
+    clickTraceStep: "Inspect this route step",
     host: "Host",
     hostPlaceholder: "server_name, e.g. example.com",
     path: "Path",
@@ -86,7 +96,16 @@ const copy = {
     dragEdge: "Drag the lower edge",
     resizeIssues: "Resize issues panel",
     issuePanelHint: "Review parser errors and advisory checks together.",
-    jumpToLine: "Click an issue to jump to its configuration line."
+    jumpToLine: "Click an issue to jump to its configuration line.",
+    sampleLabel: "Sample configuration",
+    sampleDescription: "Built-in sample only; configuration stays in this browser session.",
+    sessionLabel: "Session configuration",
+    sessionDescription: "Configuration is processed locally and is not uploaded.",
+    candidateRoutes: "Candidate routes",
+    candidateCount: (count: number) => `${count} candidates`,
+    incompleteResult: "Result is incomplete because the configuration contains parse errors.",
+    source: "Source",
+    shortcutsHelp: "Shortcuts: / search · R request · F fit · Esc clear · [ ] issues · ? help"
   },
   zh: {
     switchLanguage: "Switch to English",
@@ -97,6 +116,10 @@ const copy = {
     exportPng: "导出拓扑 PNG",
     exportJsonShort: "JSON",
     exportPngShort: "PNG",
+    copyTrace: "复制路由追踪",
+    copyTraceShort: "复制",
+    traceCopied: "已复制路由追踪",
+    traceCopyFailed: "无法复制路由追踪。",
     lightThemeShort: "浅色",
     darkThemeShort: "深色",
     enterFullscreen: "进入全屏",
@@ -123,6 +146,12 @@ const copy = {
     clearSelection: "清除拓扑选择",
     updating: "正在更新拓扑...",
     simulator: "请求路由模拟",
+    routeTrace: "路由追踪",
+    showAllIssues: "查看全部问题",
+    showRouteIssues: "只看当前路径问题",
+    routeIssues: "当前路径问题",
+    allIssues: "全部问题",
+    clickTraceStep: "查看此路由步骤",
     host: "主机",
     hostPlaceholder: "server_name，例如 example.com",
     path: "路径",
@@ -149,9 +178,21 @@ const copy = {
     dragEdge: "拖动下边界调整高度",
     resizeIssues: "调整问题面板高度",
     issuePanelHint: "统一查看解析错误与配置建议。",
-    jumpToLine: "点击问题可快速跳转到对应配置行。"
+    jumpToLine: "点击问题可快速跳转到对应配置行。",
+    sampleLabel: "示例配置",
+    sampleDescription: "仅为内置示例；配置只保存在当前浏览器会话中。",
+    sessionLabel: "当前会话配置",
+    sessionDescription: "配置仅在浏览器本地处理，不会上传。",
+    candidateRoutes: "候选路径",
+    candidateCount: (count: number) => `${count} 个候选`,
+    incompleteResult: "配置存在解析错误，当前结果不完整。",
+    source: "来源",
+    shortcutsHelp: "快捷键：/ 搜索 · R 请求 · F 适配 · Esc 清除 · [ ] 问题 · ? 帮助"
   }
 } as const;
+
+type LocaleKeyMismatch = Exclude<keyof typeof copy.en, keyof typeof copy.zh> | Exclude<keyof typeof copy.zh, keyof typeof copy.en>;
+const localeKeysAreComplete: LocaleKeyMismatch extends never ? true : never = true;
 
 const issueMessages = {
   en: {
@@ -230,10 +271,12 @@ const issueSuggestions = {
 function Workspace() {
   const [config, setConfig] = useState(sampleConfig);
   const [query, setQuery] = useState("");
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [language, setLanguage] = useState<Language>("zh");
+  const [theme, setTheme] = useState<"dark" | "light">(readThemePreference);
+  const [language, setLanguage] = useState<Language>(readLanguagePreference);
   const [selected, setSelected] = useState<TopologyNode | TopologyEdge | null>(null);
   const [selectedId, setSelectedId] = useState<string | undefined>();
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
+  const [configOrigin, setConfigOrigin] = useState<"sample" | "session">("sample");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [layout, setLayout] = useState<Layout>("horizontal");
@@ -242,15 +285,20 @@ function Workspace() {
   const [leftPanelWidth, setLeftPanelWidth] = useState(340);
   const [canvasFocused, setCanvasFocused] = useState(false);
   const [simulationInput, setSimulationInput] = useState<RequestSimulationInput>({
-    host: "example.com",
-    path: "/api/users",
+    host: "",
+    path: "/",
     scheme: "http",
     port: 80
   });
   const [simulationPort, setSimulationPort] = useState("80");
-  const [simulationEnabled, setSimulationEnabled] = useState(false);
+  const [simulationEnabled, setSimulationEnabled] = useState(true);
+  const [issueScope, setIssueScope] = useState<"route" | "all">("route");
+  const requestInputTouchedRef = useRef(false);
   const flowRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<CodeEditorHandle>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const requestHostRef = useRef<HTMLInputElement>(null);
+  const issueIndexRef = useRef(0);
   const resizeStartRef = useRef<{ x: number; width: number } | null>(null);
   const { fitView } = useReactFlow();
   const text = copy[language];
@@ -261,13 +309,13 @@ function Workspace() {
   const graph = useMemo<TopologyGraph>(() => buildTopology(parsedConfig), [parsedConfig]);
   const simulation = useMemo<RequestSimulationResult>(
     () => simulationEnabled
-      ? simulateRequest(graph.routing, graph.edges, simulationInput)
+      ? simulateRequest(graph.routing, graph.edges, simulationInput, graph.nodes)
       : inactiveSimulation(text.simulationEmpty),
     [graph, simulationEnabled, simulationInput, text.simulationEmpty]
   );
   const elements = useMemo(
-    () => toFlowElements(graph, topologyQuery, selectedId, layout, { nodeIds: simulation.nodeIds, edgeIds: simulation.edgeIds, active: simulationEnabled }),
-    [graph, topologyQuery, selectedId, layout, simulation, simulationEnabled]
+    () => toFlowElements(graph, topologyQuery, selectedId, layout, { nodeIds: simulation.nodeIds, edgeIds: [...simulation.edgeIds, ...(selectedEdgeId ? [selectedEdgeId] : [])], active: simulationEnabled || Boolean(selectedEdgeId) }),
+    [graph, topologyQuery, selectedId, selectedEdgeId, layout, simulation, simulationEnabled]
   );
   const [flowNodes, setFlowNodes] = useState<Node[]>([]);
   const onNodesChange: OnNodesChange = useCallback((changes) => {
@@ -291,11 +339,31 @@ function Workspace() {
     }
   }, [elements.nodes, graph, layout]);
 
-  const visibleIssues = useMemo(
-    () => [...graph.issues].sort(compareIssues).slice(0, 5),
-    [graph.issues]
-  );
+  const visibleIssues = useMemo(() => {
+    const focusedIds = new Set(simulation.nodeIds);
+    if (selectedId) focusedIds.add(selectedId);
+    if (selectedEdgeId) {
+      const edge = graph.edges.find((candidate) => candidate.id === selectedEdgeId);
+      if (edge) {
+        focusedIds.add(edge.source);
+        focusedIds.add(edge.target);
+      }
+    }
+    const scoped = issueScope === "all"
+      ? graph.issues
+      : graph.issues.filter((issue) => issue.source === "parse" || issue.relatedNodeIds?.some((id) => focusedIds.has(id)));
+    return [...scoped].sort(compareIssues).slice(0, 5);
+  }, [graph.edges, graph.issues, issueScope, selectedEdgeId, selectedId, simulation.nodeIds]);
   const simulationPathHelp = simulationInput.path.trim().startsWith("/") ? "" : text.pathWillNormalize;
+
+  const requestSuggestions = useMemo(() => suggestRequestInputs(graph.routing), [graph.routing]);
+
+  useEffect(() => {
+    const suggestion = requestSuggestions[0];
+    if (!suggestion || requestInputTouchedRef.current) return;
+    setSimulationInput(suggestion);
+    setSimulationPort(suggestion.port ? String(suggestion.port) : "");
+  }, [requestSuggestions]);
 
   useEffect(() => {
     const syncFullscreen = () => setFullscreen(Boolean(document.fullscreenElement));
@@ -305,35 +373,65 @@ function Workspace() {
 
   useEffect(() => {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+    writeLocalPreference("ngui-language", language);
   }, [language]);
+
+  useEffect(() => {
+    writeLocalPreference("ngui-theme", theme);
+  }, [theme]);
 
   const onFile = async (file?: File) => {
     if (!file) return;
     try {
+      requestInputTouchedRef.current = false;
       setConfig(await file.text());
+      setConfigOrigin("session");
       setSelected(null);
       setSelectedId(undefined);
+      setSelectedEdgeId(undefined);
       setStatusMessage(language === "zh" ? `已载入 ${file.name}` : `Loaded ${file.name}`);
     } catch {
       setStatusMessage(language === "zh" ? `无法读取 ${file.name}，请选择可读取的文本文件。` : `Could not read ${file.name}. Choose a readable text file.`);
     }
   };
 
+  const loadSample = useCallback(() => {
+    requestInputTouchedRef.current = false;
+    setConfig(sampleConfig);
+    setConfigOrigin("sample");
+    setSelected(null);
+    setSelectedId(undefined);
+    setSelectedEdgeId(undefined);
+  }, []);
+
   const onNodeClick = (_: unknown, node: Node) => {
     if (node.type !== "nginxNode") return;
     setSelected(node.data as TopologyNode);
     setSelectedId((node.data as TopologyNode & { nodeId?: string }).nodeId || node.id);
+    setSelectedEdgeId(undefined);
   };
 
   const onEdgeClick = (_: unknown, edge: Edge) => {
     setSelected(edge.data as TopologyEdge);
     setSelectedId(undefined);
+    setSelectedEdgeId(edge.id);
   };
 
   const exportJson = () => {
-    downloadBlob("nginx-topology.json", JSON.stringify(graph, null, 2), "application/json");
+    downloadBlob("nginx-topology.json", JSON.stringify({ schemaVersion: 1, ...graph }, null, 2), "application/json");
     setStatusMessage(language === "zh" ? "已导出拓扑 JSON" : "Exported topology as JSON");
   };
+
+  const copyRouteTrace = useCallback(async () => {
+    const trace = formatRouteTrace(simulation, language);
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(trace);
+      setStatusMessage(text.traceCopied);
+    } catch {
+      setStatusMessage(text.traceCopyFailed);
+    }
+  }, [language, simulation, text.traceCopied, text.traceCopyFailed]);
 
   const exportPng = useCallback(async () => {
     const viewport = flowRef.current?.querySelector(".react-flow__viewport") as HTMLElement | null;
@@ -410,6 +508,71 @@ function Workspace() {
     setStatusMessage(language === "zh" ? `已定位到第 ${line} 行` : `Jumped to line ${line}`);
   }, [language]);
 
+  const focusIssue = useCallback((issue: ConfigIssue) => {
+    const relatedId = issue.relatedNodeIds?.[0];
+    const node = relatedId ? graph.nodes.find((candidate) => candidate.id === relatedId) : undefined;
+    const edgeId = issue.relatedEdgeIds?.[0];
+    const edge = edgeId ? graph.edges.find((candidate) => candidate.id === edgeId) : undefined;
+    if (edge) {
+      setSelected(edge);
+      setSelectedEdgeId(edge.id);
+      setSelectedId(undefined);
+    } else if (node) {
+      setSelected(node);
+      setSelectedId(node.id);
+      setSelectedEdgeId(undefined);
+    }
+    focusIssueLine(issue.loc.line);
+  }, [focusIssueLine, graph.nodes]);
+
+  const focusRouteStep = useCallback((step: RequestRouteStep) => {
+    const node = step.nodeId ? graph.nodes.find((candidate) => candidate.id === step.nodeId) : undefined;
+    const edge = step.edgeId ? graph.edges.find((candidate) => candidate.id === step.edgeId) : undefined;
+    if (edge) {
+      setSelected(edge);
+      setSelectedEdgeId(edge.id);
+      setSelectedId(undefined);
+    } else if (node) {
+      setSelected(node);
+      setSelectedId(node.id);
+      setSelectedEdgeId(undefined);
+    }
+    if (step.source) focusIssueLine(step.source.line);
+  }, [focusIssueLine, graph.nodes]);
+
+  useEffect(() => {
+    const onShortcut = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = target?.matches("input, textarea, select, [contenteditable='true']");
+      if (event.key === "Escape") {
+        setSelected(null);
+        setSelectedId(undefined);
+        setSelectedEdgeId(undefined);
+        return;
+      }
+      if (typing) return;
+      if (event.key === "/") {
+        event.preventDefault();
+        searchRef.current?.focus();
+      } else if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        requestHostRef.current?.focus();
+      } else if (event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        fitView({ padding: 0.16, duration: 260 });
+      } else if (event.key === "[" || event.key === "]") {
+        if (visibleIssues.length === 0) return;
+        const direction = event.key === "]" ? 1 : -1;
+        issueIndexRef.current = (issueIndexRef.current + direction + visibleIssues.length) % visibleIssues.length;
+        focusIssue(visibleIssues[issueIndexRef.current]);
+      } else if (event.key === "?") {
+        setStatusMessage(text.shortcutsHelp);
+      }
+    };
+    document.addEventListener("keydown", onShortcut);
+    return () => document.removeEventListener("keydown", onShortcut);
+  }, [fitView, focusIssue, text.shortcutsHelp, visibleIssues]);
+
   const onIssueKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>, line: number) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
@@ -448,6 +611,10 @@ function Workspace() {
           <button aria-label={text.exportJson} title={text.exportJson} onClick={exportJson}>
             <FileJson size={16} />
             <span className="menu-action-label">{text.exportJsonShort}</span>
+          </button>
+          <button aria-label={text.copyTrace} title={text.copyTrace} onClick={copyRouteTrace}>
+            <Copy size={16} />
+            <span className="menu-action-label">{text.copyTraceShort}</span>
           </button>
           <button aria-label={text.exportPng} title={text.exportPng} disabled={exportingPng} onClick={exportPng}>
             <Download size={16} />
@@ -495,7 +662,7 @@ function Workspace() {
               <span className="sr-only">{text.uploadConfig}</span>
               <input aria-label={text.uploadConfig} type="file" accept=".conf,.txt,text/plain" onChange={(event) => onFile(event.target.files?.[0])} />
             </label>
-            <button className="panel-tool-button" aria-label={text.loadSample} title={text.loadSample} onClick={() => setConfig(sampleConfig)}>
+            <button className="panel-tool-button" aria-label={text.loadSample} title={text.loadSample} onClick={loadSample}>
               <RefreshCcw size={16} />
               <span className="tool-label">{text.sampleShort}</span>
             </button>
@@ -504,6 +671,7 @@ function Workspace() {
               <label className="sr-only" htmlFor="topology-search">{text.search}</label>
               <input
                 id="topology-search"
+                ref={searchRef}
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
@@ -527,8 +695,11 @@ function Workspace() {
                 maxHeight={460}
                 header={(
                   <div className="issues-header">
-                    <strong>{text.issues.toUpperCase()}</strong>
-                    <span>{graph.issues.length}</span>
+                    <strong>{(issueScope === "route" ? text.routeIssues : text.allIssues).toUpperCase()}</strong>
+                    <button type="button" className="issues-scope-toggle" onClick={() => setIssueScope((scope) => scope === "route" ? "all" : "route")}>
+                      {issueScope === "route" ? text.showAllIssues : text.showRouteIssues}
+                    </button>
+                    <span>{visibleIssues.length}/{graph.issues.length}</span>
                   </div>
                 )}
                 helperText={text.dragEdge}
@@ -541,7 +712,7 @@ function Workspace() {
                       key={issue.id}
                       type="button"
                       className={`issue-item issue-item--${issue.severity}`}
-                      onClick={() => focusIssueLine(issue.loc.line)}
+                      onClick={() => focusIssue(issue)}
                       onKeyDown={(event) => onIssueKeyDown(event, issue.loc.line)}
                       title={language === "zh" ? `定位到第 ${issue.loc.line} 行` : `Jump to line ${issue.loc.line}`}
                     >
@@ -561,7 +732,11 @@ function Workspace() {
           </div>
 
           <div className="config-textarea-area">
-            <CodeEditor ref={editorRef} value={config} onChange={setConfig} label={text.configuration} />
+            <div className="config-origin" role="status">
+              <strong>{configOrigin === "sample" ? text.sampleLabel : text.sessionLabel}</strong>
+              <span>{configOrigin === "sample" ? text.sampleDescription : text.sessionDescription}</span>
+            </div>
+            <CodeEditor ref={editorRef} value={config} onChange={(value) => { setConfig(value); setConfigOrigin("session"); }} label={text.configuration} />
           </div>
         </div>
 
@@ -591,6 +766,7 @@ function Workspace() {
           onPaneClick={() => {
             setSelected(null);
             setSelectedId(undefined);
+            setSelectedEdgeId(undefined);
           }}
         >
           <Background gap={28} size={1} />
@@ -608,10 +784,14 @@ function Workspace() {
               <span>{text.host}</span>
               <input
                 value={simulationInput.host}
+                ref={requestHostRef}
                 aria-label={text.host}
                 placeholder={text.hostPlaceholder}
                 title={text.hostPlaceholder}
-                onChange={(event) => setSimulationInput((value) => ({ ...value, host: event.target.value.trim() }))}
+                onChange={(event) => {
+                  requestInputTouchedRef.current = true;
+                  setSimulationInput((value) => ({ ...value, host: event.target.value.trim() }));
+                }}
               />
             </label>
             <label>
@@ -620,7 +800,10 @@ function Workspace() {
                 value={simulationInput.path}
                 aria-label={text.path}
                 aria-describedby={simulationPathHelp ? "simulation-path-help" : undefined}
-                onChange={(event) => setSimulationInput((value) => ({ ...value, path: event.target.value }))}
+                onChange={(event) => {
+                  requestInputTouchedRef.current = true;
+                  setSimulationInput((value) => ({ ...value, path: event.target.value }));
+                }}
               />
             </label>
             <label>
@@ -629,6 +812,7 @@ function Workspace() {
                 value={simulationInput.scheme}
                 aria-label={text.scheme}
                 onChange={(event) => {
+                  requestInputTouchedRef.current = true;
                   const scheme = event.target.value as RequestSimulationInput["scheme"];
                   setSimulationPort((port) => {
                     if (scheme === "https" && port === "80") return "443";
@@ -654,6 +838,7 @@ function Workspace() {
                 value={simulationPort}
                 aria-label={text.port}
                 onChange={(event) => {
+                  requestInputTouchedRef.current = true;
                   const { displayValue, port } = parsePortInput(event.target.value);
                   setSimulationPort(displayValue);
                   setSimulationInput((value) => ({ ...value, port }));
@@ -682,6 +867,8 @@ function Workspace() {
               enabled={simulationEnabled}
               language={language}
               pathHelp={simulationPathHelp}
+              incomplete={graph.issues.some((issue) => issue.source === "parse")}
+              onStepClick={focusRouteStep}
             />
           </Panel>
           <Panel position="top-right" className="canvas-actions">
@@ -693,7 +880,7 @@ function Workspace() {
             >
               {canvasFocused ? <Minimize size={16} /> : <Maximize2 size={16} />}
             </button>
-            <button aria-label={text.clearSelection} title={text.clearSelection} onClick={() => { setSelectedId(undefined); structureKeyRef.current = ""; setFlowNodes(elements.nodes); }}>
+            <button aria-label={text.clearSelection} title={text.clearSelection} onClick={() => { setSelected(null); setSelectedId(undefined); setSelectedEdgeId(undefined); structureKeyRef.current = ""; setFlowNodes(elements.nodes); }}>
               <RefreshCcw size={16} />
             </button>
           </Panel>
@@ -892,6 +1079,7 @@ function DetailPanel({ selected, graph, language, simulation }: { selected: Topo
       <SimulationSummary simulation={simulation} language={language} compact />
       {isNode && selected.subtitle ? <p className="subtitle">{translateExplanation(selected.subtitle, language)}</p> : null}
       {isNode && selected.source ? <p className="line">{formatLocation(selected.source.line, selected.source.file, language)}</p> : null}
+      {!isNode && selected.sourceLocation ? <p className="line">{text.source}: {formatLocation(selected.sourceLocation.line, selected.sourceLocation.file, language)}</p> : null}
       {isNode && selected.confidence ? (
         <p className={`confidence-note confidence-note--${selected.confidence}`}>
           {text.confidence}: {text.confidenceValue[selected.confidence]}. {confidenceHelp(selected.confidence, language)}
@@ -920,7 +1108,7 @@ function DetailPanel({ selected, graph, language, simulation }: { selected: Topo
   );
 }
 
-function SimulationOutcome({ simulation, enabled, language, pathHelp }: { simulation: RequestSimulationResult; enabled: boolean; language: Language; pathHelp: string }) {
+function SimulationOutcome({ simulation, enabled, language, pathHelp, incomplete, onStepClick }: { simulation: RequestSimulationResult; enabled: boolean; language: Language; pathHelp: string; incomplete: boolean; onStepClick: (step: RequestRouteStep) => void }) {
   const text = copy[language];
   const confidence = text.confidenceValue[simulation.confidence];
   const reason = simulation.reasons.find((item) => item !== simulation.summary) || simulation.reasons[0] || "";
@@ -937,6 +1125,40 @@ function SimulationOutcome({ simulation, enabled, language, pathHelp }: { simula
           <span id={pathHelp ? "simulation-path-help" : undefined}>{pathHelp || text.simulationUnavailable}</span>
         ) : null}
       </div>
+      {incomplete ? <p className="simulation-incomplete" role="alert">{text.incompleteResult}</p> : null}
+      {simulation.candidates.length > 1 ? (
+        <div className="route-candidates">
+          <strong>{text.candidateRoutes} · {text.candidateCount(simulation.candidates.length)}</strong>
+          <ol>
+            {simulation.candidates.map((candidate) => (
+              <li key={candidate.id} className={`route-candidate route-candidate--${candidate.status}`}>
+                <span>{translateSimulation(candidate.summary, language)}</span>
+                <span className="route-candidate__confidence">{text.simulationConfidence}: {text.confidenceValue[candidate.confidence]}</span>
+                <small>{candidate.reasons.map((candidateReason) => translateSimulation(candidateReason, language)).join(" · ")}</small>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+      {simulation.steps.length > 0 ? (
+        <div className="route-trace" aria-label={text.routeTrace}>
+          <strong>{text.routeTrace}</strong>
+          <ol>
+            {simulation.steps.map((step) => (
+              <li key={step.id} className={`route-trace__step route-trace__step--${step.status}`}>
+                <button type="button" onClick={() => onStepClick(step)} title={text.clickTraceStep}>
+                  <span className="route-trace__kind">{translateRouteStepKind(step.kind, language)}</span>
+                  <span>{step.label}</span>
+                </button>
+                <small>
+                  {translateSimulation(step.reason, language)}
+                  {step.source ? ` · ${formatLocation(step.source.line, step.source.file, language)}` : ""}
+                </small>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1056,11 +1278,57 @@ function translateLocationKind(value: string) {
     .replace("prefix", "普通前缀");
 }
 
+function translateRouteStepKind(value: RequestRouteStep["kind"], language: Language) {
+  if (language === "en") return value;
+  const labels: Record<RequestRouteStep["kind"], string> = {
+    request: "请求",
+    server: "server",
+    location: "location",
+    entry: "入口",
+    route: "路由指令",
+    upstream: "upstream",
+    target: "后端",
+    variable: "变量",
+    unknown: "未知"
+  };
+  return labels[value];
+}
+
 function parsePortInput(value: string) {
   const digits = value.replace(/\D/g, "");
   if (!digits) return { displayValue: "", port: undefined };
   const port = Math.min(65535, Math.max(1, Number(digits)));
   return { displayValue: String(port), port };
+}
+
+function readThemePreference(): "dark" | "light" {
+  const stored = readLocalPreference("ngui-theme");
+  if (stored === "light" || stored === "dark") return stored;
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+function readLanguagePreference(): Language {
+  const stored = readLocalPreference("ngui-language");
+  if (stored === "en" || stored === "zh") return stored;
+  return typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
+}
+
+function readLocalPreference(key: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalPreference(key: string, value: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Preferences are optional; private browsing must not break the workspace.
+  }
 }
 
 function inactiveSimulation(summary: string): RequestSimulationResult {
@@ -1070,8 +1338,22 @@ function inactiveSimulation(summary: string): RequestSimulationResult {
     nodeIds: [],
     edgeIds: [],
     summary,
-    reasons: [summary]
+    reasons: [summary],
+    steps: [],
+    candidates: []
   };
+}
+
+function formatRouteTrace(simulation: RequestSimulationResult, language: Language) {
+  const lines = [translateSimulation(simulation.summary, language)];
+  const candidates = simulation.candidates.length ? simulation.candidates : [{ steps: simulation.steps, summary: simulation.summary }];
+  candidates.forEach((candidate, index) => {
+    if (simulation.candidates.length > 1) lines.push(`${index + 1}. ${translateSimulation(candidate.summary, language)}`);
+    candidate.steps.forEach((step) => {
+      lines.push(`  ${translateRouteStepKind(step.kind, language)}: ${step.label} — ${translateSimulation(step.reason, language)}`);
+    });
+  });
+  return lines.join("\n");
 }
 
 function translateParseMessage(message: string) {

@@ -65,6 +65,13 @@ describe("nginx parser", () => {
     expect(graph.issues.some((issue) => issue.source === "parse" && String(issue.params?.message).includes("Unclosed block"))).toBe(true);
     expect(graph.nodes.some((node) => node.type === "entry")).toBe(true);
   });
+
+  it("associates issues with both nodes and edges at their source location", () => {
+    const graph = buildTopology("http { server { location / { proxy_pass http://missing_pool; } } }");
+    const issue = graph.issues.find((candidate) => candidate.messageKey === "pass.undefinedUpstream");
+
+    expect(issue?.relatedEdgeIds?.some((id) => graph.edges.find((edge) => edge.id === id)?.label === "proxy_pass")).toBe(true);
+  });
 });
 
 describe("topology model", () => {
@@ -135,5 +142,12 @@ describe("topology model", () => {
     const graph = buildTopology("http { server { listen 80; server_name example.com; location = /health { return 200; } location /api { proxy_pass http://app; } } }");
     expect(graph.routing?.servers[0].locations.map((location) => location.kind)).toEqual(["exact", "prefix"]);
     expect(graph.nodes.some((node) => node.type === "route" && node.match?.kind === "exact" && node.details[0].includes("Location match"))).toBe(true);
+  });
+
+  it("associates configuration issues with topology nodes at the same source location", () => {
+    const graph = buildTopology("http { server { listen 80; location / { proxy_pass http://missing_pool; } } }");
+    const issue = graph.issues.find((candidate) => candidate.messageKey === "pass.undefinedUpstream");
+
+    expect(issue?.relatedNodeIds?.some((id) => graph.nodes.find((node) => node.id === id)?.type === "target")).toBe(true);
   });
 });

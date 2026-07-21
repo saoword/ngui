@@ -34,7 +34,7 @@ export function buildTopologyFromAst(ast: NginxBlock, errors: ParseError[] = [])
         raw: node.raw,
         details: ["No explicit listen directive found."]
       });
-      addEdge(edges, entryId, serverId, "flow", "serves");
+      addEdge(edges, entryId, serverId, "flow", "serves", undefined, node.loc);
     } else {
       listens.forEach((listen) => {
         const label = `${context} ${listen.args.join(" ")}`;
@@ -47,7 +47,7 @@ export function buildTopologyFromAst(ast: NginxBlock, errors: ParseError[] = [])
           raw: listen.raw,
           details: [`Entry point declared by ${listen.raw}`]
         });
-        addEdge(edges, entryId, serverId, "flow", "serves");
+        addEdge(edges, entryId, serverId, "flow", "serves", undefined, listen.loc);
       });
     }
 
@@ -71,7 +71,7 @@ export function buildTopologyFromAst(ast: NginxBlock, errors: ParseError[] = [])
         match,
         details: [`Location match: ${match.kind} ${match.pattern}`, ...collectDetails(location)]
       });
-      addEdge(edges, serverId, routeId, "flow", "matches");
+      addEdge(edges, serverId, routeId, "flow", "matches", undefined, location.loc);
       connectPasses(location, routeId, upstreams, maps, nodes, edges);
       location.children.filter((child) => !isBlock(child) && routeDirective(child)).forEach((route) => {
         connectRoute(route, routeId, upstreams, maps, nodes, edges);
@@ -79,7 +79,21 @@ export function buildTopologyFromAst(ast: NginxBlock, errors: ParseError[] = [])
     });
   });
 
-  return { nodes: [...nodes.values()], edges: [...edges.values()], issues, routing };
+  const graphNodes = [...nodes.values()];
+  return {
+    nodes: graphNodes,
+    edges: [...edges.values()],
+    issues: issues.map((issue) => ({
+      ...issue,
+      relatedNodeIds: graphNodes
+        .filter((node) => sameSource(node.source, issue.loc))
+        .map((node) => node.id),
+      relatedEdgeIds: [...edges.values()]
+        .filter((edge) => sameSource(edge.sourceLocation, issue.loc))
+        .map((edge) => edge.id)
+    })),
+    routing
+  };
 }
 
 function collectUpstreams(ast: NginxBlock, nodes: Map<string, TopologyNode>, edges: Map<string, TopologyEdge>) {
@@ -100,7 +114,7 @@ function collectUpstreams(ast: NginxBlock, nodes: Map<string, TopologyNode>, edg
     directives(node, "server").forEach((backend) => {
       const label = backend.args.join(" ");
       const targetId = upsert(nodes, targetNode(`backend-${hash(`${name}-${label}`)}-${backend.id}`, label, backend));
-      addEdge(edges, upstreamId, targetId, "flow", "balances");
+      addEdge(edges, upstreamId, targetId, "flow", "balances", undefined, backend.loc);
     });
   });
   return upstreams;
@@ -163,21 +177,21 @@ function connectPasses(
         details: [`Dynamic expression: ${target}`],
         confidence: "low"
       });
-      addEdge(edges, sourceId, variableId, "dynamic", pass.name, pass.raw);
+      addEdge(edges, sourceId, variableId, "dynamic", pass.name, pass.raw, pass.loc);
       const targetId = upsert(nodes, targetNode(`target-dynamic-${hash(target)}-${pass.id}`, target, pass, "low"));
-      addEdge(edges, variableId, targetId, "dynamic", "resolves");
+      addEdge(edges, variableId, targetId, "dynamic", "resolves", undefined, pass.loc);
       return;
     }
 
     const upstreamName = normalizeUpstreamName(target);
     const upstreamId = upstreamName ? upstreams.get(upstreamName) : undefined;
     if (upstreamId) {
-      addEdge(edges, sourceId, upstreamId, "flow", pass.name, pass.raw);
+      addEdge(edges, sourceId, upstreamId, "flow", pass.name, pass.raw, pass.loc);
       return;
     }
 
     const targetId = upsert(nodes, targetNode(`target-${hash(target)}-${pass.id}`, target, pass));
-    addEdge(edges, sourceId, targetId, "flow", pass.name, pass.raw);
+    addEdge(edges, sourceId, targetId, "flow", pass.name, pass.raw, pass.loc);
   });
 }
 
@@ -198,7 +212,7 @@ function connectRoute(
     raw: directive.raw,
     details: [directive.raw]
   });
-  addEdge(edges, sourceId, routeId, directive.name === "rewrite" ? "rewrite" : "flow", directive.name, directive.raw);
+  addEdge(edges, sourceId, routeId, directive.name === "rewrite" ? "rewrite" : "flow", directive.name, directive.raw, directive.loc);
   connectPasses({ ...directive, children: [] }, routeId, upstreams, maps, nodes, edges);
 }
 
@@ -240,10 +254,11 @@ function addEdge(
   target: string,
   type: TopologyEdge["type"],
   label?: string,
-  sourceRaw?: string
+  sourceRaw?: string,
+  sourceLocation?: TopologyEdge["sourceLocation"]
 ) {
   const id = `${source}->${target}-${label || type}`;
-  edges.set(id, { id, source, target, type, label, sourceRaw });
+  edges.set(id, { id, source, target, type, label, sourceRaw, sourceLocation });
 }
 
 function upsert(nodes: Map<string, TopologyNode>, node: TopologyNode) {
@@ -287,4 +302,8 @@ function parseErrorToIssue(error: ParseError, index: number): ConfigIssue {
     loc: error.loc,
     source: "parse"
   };
+}
+
+function sameSource(left: TopologyNode["source"], right: ConfigIssue["loc"]) {
+  return Boolean(left && left.line === right.line && left.column === right.column && left.file === right.file);
 }
