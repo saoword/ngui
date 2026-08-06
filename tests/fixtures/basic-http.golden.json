@@ -1,0 +1,12 @@
+{
+  "nodeLabels": ["app.example.test", "location /", "app", "127.0.0.1:8080"],
+  "issueKeys": [],
+  "requests": [
+    {
+      "input": { "host": "app.example.test", "path": "/health", "scheme": "http", "port": 80 },
+      "status": "matched",
+      "confidence": "high",
+      "summaryContains": ["app.example.test/health", "location /"]
+    }
+  ]
+}

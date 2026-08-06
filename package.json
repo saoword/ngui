@@ -1,6 +1,6 @@
 {
   "name": "ngui",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.1",
   "private": true,
   "homepage": "https://fishandsheep.github.io/ngui/",
   "type": "module",
@@ -12,13 +12,11 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
     "html-to-image": "^1.11.13",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "reactflow": "^11.11.4",
-    "vite": "^5.4.11"
+    "reactflow": "^11.11.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",
@@ -27,8 +25,10 @@
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^6.0.5",
     "jsdom": "^25.0.1",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
   }
 }

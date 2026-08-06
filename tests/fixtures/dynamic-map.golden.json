@@ -1,0 +1,12 @@
+{
+  "nodeLabels": ["dynamic.example.test", "$backend", "app_pool", "10.0.0.30:8080"],
+  "issueKeys": [],
+  "requests": [
+    {
+      "input": { "host": "dynamic.example.test", "path": "/api/users", "scheme": "http", "port": 80 },
+      "status": "matched",
+      "confidence": "low",
+      "summaryContains": ["dynamic.example.test/api/users", "location /api"]
+    }
+  ]
+}

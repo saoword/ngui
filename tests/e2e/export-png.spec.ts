@@ -4,6 +4,13 @@ import { readFile } from "node:fs/promises";
 test("exports topology PNG with visible edge paths", async ({ page }) => {
   await page.goto("/");
   await page.waitForSelector("path.react-flow__edge-path:not(.dimmed-edge)");
+  const edgeColors = await page.locator("path.react-flow__edge-path:not(.dimmed-edge)").evaluateAll((paths) => [
+    ...new Set(paths.map((path) => getComputedStyle(path).stroke))
+  ]);
+  const edgeRgb = edgeColors.flatMap((color) => {
+    const channels = color.match(/\d+(?:\.\d+)?/g)?.map(Number);
+    return channels && channels.length >= 3 ? [[channels[0], channels[1], channels[2]]] : [];
+  });
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: /导出拓扑 PNG|Export topology as PNG/ }).click();
@@ -12,7 +19,7 @@ test("exports topology PNG with visible edge paths", async ({ page }) => {
   expect(filePath).toBeTruthy();
 
   const imageBase64 = (await readFile(filePath as string)).toString("base64");
-  const result = await page.evaluate(async (base64) => {
+  const result = await page.evaluate(async ({ base64, edgeRgb }) => {
     const image = new Image();
     image.src = `data:image/png;base64,${base64}`;
     await image.decode();
@@ -33,10 +40,11 @@ test("exports topology PNG with visible edge paths", async ({ page }) => {
       const alpha = data[index + 3];
       if (alpha < 180) continue;
 
-      const blueEdge = red < 125 && green > 125 && green < 190 && blue > 210;
-      const rewriteEdge = red > 190 && green < 140 && blue > 190;
-      const dynamicEdge = red > 200 && green > 145 && green < 215 && blue < 140;
-      if (blueEdge || rewriteEdge || dynamicEdge) edgeColorPixels += 1;
+      const matchesEdgeColor = edgeRgb.some(([edgeRed, edgeGreen, edgeBlue]) => {
+        const distance = Math.hypot(red - edgeRed, green - edgeGreen, blue - edgeBlue);
+        return distance < 72;
+      });
+      if (matchesEdgeColor) edgeColorPixels += 1;
     }
 
     return {
@@ -44,7 +52,7 @@ test("exports topology PNG with visible edge paths", async ({ page }) => {
       height: canvas.height,
       edgeColorPixels
     };
-  }, imageBase64);
+  }, { base64: imageBase64, edgeRgb });
 
   expect(result.width).toBeGreaterThan(1000);
   expect(result.height).toBeGreaterThan(800);

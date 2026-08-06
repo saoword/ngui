@@ -16,7 +16,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+
   build:
+    needs: quality
     runs-on: ubuntu-latest
 
     steps:
@@ -31,9 +35,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Run tests
-        run: npm test
 
       - name: Build
         run: npm run build

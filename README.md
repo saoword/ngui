@@ -4,13 +4,19 @@
 
 [English](README-en.md)
 
+[在线体验](https://fishandsheep.github.io/ngui/) · [GitHub Issues](https://github.com/fishandsheep/ngui/issues)
+
 ![React](https://img.shields.io/badge/React-18-61dafb?logo=react&logoColor=111)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=fff)
-![Vite](https://img.shields.io/badge/Vite-5-646cff?logo=vite&logoColor=fff)
+![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=fff)
 ![Local First](https://img.shields.io/badge/Privacy-local--first-22c55e)
 ![License](https://img.shields.io/badge/License-Apache--2.0-blue)
 
 Nginx UI Topology 是一个本地优先的 Web 工具，用于可视化 Nginx 路由行为。粘贴或上传 `nginx -T` 的输出，然后在交互式拓扑画布中查看服务器、location、upstream、后端目标、变量和请求流向。
+
+## Beta 状态
+
+当前发布版本为 `v0.1.0-beta.1`。首版面向桌面端最新版 Chrome、Firefox 和 Safari，输出是针对文档化 Nginx 子集的可解释静态推断，不是精确的 Nginx 运行时模拟器。
 
 ## 截图
 
@@ -116,7 +122,14 @@ npm run preview  # 预览生产构建
 
 ## 隐私
 
-所有解析和渲染均在浏览器中完成。应用不需要后端服务，也不会上传 Nginx 配置内容。
+所有解析和渲染均在浏览器中完成。应用不需要后端服务，不使用遥测，也不会上传或持久化 Nginx 配置内容；仅主题和语言偏好会保存在浏览器中。JSON 导出包含 `schemaVersion: 1`，并可能包含主机名、路径和后端地址，分享前请先检查内容。
+
+## 发布与反馈
+
+- [变更记录](CHANGELOG.md)
+- [安全报告](SECURITY.md)
+- [贡献指南](CONTRIBUTING.md)
+- 请通过 [GitHub Issues](https://github.com/fishandsheep/ngui/issues) 反馈问题；不要提交未脱敏的生产配置。
 
 ## 许可证
 

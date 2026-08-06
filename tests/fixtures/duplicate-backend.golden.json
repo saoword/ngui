@@ -1,0 +1,4 @@
+{
+  "nodeLabels": ["duplicate_pool", "10.0.0.60:8080"],
+  "issueKeys": ["upstream.duplicateBackend"]
+}
