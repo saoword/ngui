@@ -1,0 +1,12 @@
+{
+  "nodeLabels": ["secure.example.test", "secure_pool", "10.0.0.20:8443"],
+  "issueKeys": ["server.listen443WithoutSsl"],
+  "requests": [
+    {
+      "input": { "host": "secure.example.test", "path": "/", "scheme": "https", "port": 443 },
+      "status": "matched",
+      "confidence": "high",
+      "summaryContains": ["secure.example.test/", "location /"]
+    }
+  ]
+}

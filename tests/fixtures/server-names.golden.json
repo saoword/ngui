@@ -1,0 +1,12 @@
+{
+  "nodeLabels": ["api.example.test", "location /api", "location /wild"],
+  "issueKeys": [],
+  "requests": [
+    {
+      "input": { "host": "api.example.test", "path": "/api/users", "scheme": "http", "port": 80 },
+      "status": "matched",
+      "confidence": "high",
+      "summaryContains": ["api.example.test/api/users", "location /api"]
+    }
+  ]
+}

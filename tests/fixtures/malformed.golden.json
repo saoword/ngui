@@ -1,0 +1,4 @@
+{
+  "nodeLabels": ["malformed.example.test", "location /", "http://missing_pool"],
+  "issueKeys": ["parse.raw", "pass.undefinedUpstream"]
+}

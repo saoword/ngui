@@ -1,0 +1,13 @@
+{
+  "nodeLabels": ["rewrite.example.test", "location /old", "location /"],
+  "edgeTypes": ["rewrite"],
+  "issueKeys": ["location.missingTerminalRoute"],
+  "requests": [
+    {
+      "input": { "host": "rewrite.example.test", "path": "/old/item", "scheme": "http", "port": 80 },
+      "status": "matched",
+      "confidence": "high",
+      "summaryContains": ["rewrite.example.test/old/item", "location /old"]
+    }
+  ]
+}

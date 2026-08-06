@@ -1,0 +1,13 @@
+{
+  "nodeLabels": ["source.example.test", "source_pool", "10.0.0.50:8080"],
+  "sourceFiles": ["/etc/nginx/http.conf", "/etc/nginx/upstreams.conf"],
+  "issueKeys": [],
+  "requests": [
+    {
+      "input": { "host": "source.example.test", "path": "/", "scheme": "http", "port": 80 },
+      "status": "matched",
+      "confidence": "high",
+      "summaryContains": ["source.example.test/"]
+    }
+  ]
+}
