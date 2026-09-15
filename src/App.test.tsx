@@ -78,6 +78,21 @@ describe("App accessibility and interaction states", () => {
     expect(container.querySelector(".app-shell")).not.toHaveClass("canvas-focused");
   });
 
+  it("toggles detail mode that locks node dragging", () => {
+    const { container } = render(<App />);
+    const toggle = screen.getByRole("button", { name: "详情模式：锁定节点拖动" });
+
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(toggle);
+
+    expect(screen.getByRole("button", { name: "退出详情模式" })).toHaveAttribute("aria-pressed", "true");
+    expect(container.querySelector(".canvas")).toHaveClass("canvas-detail-mode");
+    expect(screen.getByText("已进入详情模式，节点拖动已锁定。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "退出详情模式" }));
+    expect(screen.getByRole("button", { name: "详情模式：锁定节点拖动" })).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("switches concise interface copy between Chinese and English", () => {
     render(<App />);
 

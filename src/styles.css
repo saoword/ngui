@@ -319,6 +319,10 @@ button:disabled {
   gap: 10px;
 }
 
+.panel-content.has-node-switcher {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
 .panel-collapsed .panel-content {
   display: none;
 }
@@ -395,6 +399,29 @@ button:disabled {
 .search-box input::placeholder {
   color: var(--muted);
   opacity: 1;
+}
+
+.node-switcher {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.node-switcher__select {
+  height: 34px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 8px;
+  color: var(--text);
+  background: var(--button);
+}
+
+.node-switcher__select:disabled,
+.node-switcher .panel-tool-button:disabled {
+  opacity: 0.6;
 }
 
 .status-grid {
@@ -880,6 +907,20 @@ button:disabled {
 .canvas-actions {
   display: flex;
   gap: 8px;
+}
+
+.canvas-actions button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--panel-2) 84%, var(--accent) 16%);
+}
+
+.canvas-detail-mode .react-flow__node {
+  cursor: default;
+}
+
+.canvas-detail-mode .react-flow__node.dragging {
+  transition: none;
 }
 
 .request-simulator {

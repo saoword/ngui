@@ -61,4 +61,31 @@ describe("topology search states", () => {
     expect(elements.nodes.some((node) => node.id === "server::entry-443")).toBe(true);
     expect(elements.edges.some((edge) => edge.id === "server::server-route")).toBe(true);
   });
+
+  it("spaces route nodes by estimated height so long descriptions stay apart", () => {
+    const buildGraph = (routeLabel: string): TopologyGraph => ({
+      nodes: [
+        { id: "server", type: "server", label: "example.com", details: [] },
+        { id: "route-a", type: "route", label: routeLabel, subtitle: routeLabel, details: [] },
+        { id: "route-b", type: "route", label: `${routeLabel} b`, subtitle: routeLabel, details: [] }
+      ],
+      edges: [
+        { id: "edge-a", source: "server", target: "route-a", type: "flow", label: "matches" },
+        { id: "edge-b", source: "server", target: "route-b", type: "flow", label: "matches" }
+      ],
+      issues: []
+    });
+    const routeGap = (routeLabel: string) => {
+      const elements = toFlowElements(buildGraph(routeLabel));
+      const first = elements.nodes.find((node) => node.id === "server::route-a");
+      const second = elements.nodes.find((node) => node.id === "server::route-b");
+      return Math.abs((second?.position.y ?? 0) - (first?.position.y ?? 0));
+    };
+
+    const shortGap = routeGap("location /a");
+    const longGap = routeGap(`location /${"segments/".repeat(8)}`);
+
+    expect(shortGap).toBeGreaterThanOrEqual(78);
+    expect(longGap).toBeGreaterThan(shortGap);
+  });
 });

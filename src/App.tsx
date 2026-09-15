@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import ReactFlow, { Background, ControlButton, Controls, MiniMap, Panel, ReactFlowProvider, useReactFlow, applyNodeChanges, type Edge, type Node, type OnNodesChange } from "reactflow";
 import "reactflow/dist/style.css";
-import { Copy, Download, FileJson, Github, Languages, Maximize, Maximize2, Minimize, Moon, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCcw, RefreshCw, Search, Sun, Upload } from "lucide-react";
+import { Copy, Download, FileJson, Github, Languages, Lock, Maximize, Maximize2, Minimize, Moon, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCcw, RefreshCw, Search, Sun, Unlock, Upload } from "lucide-react";
 import { toPng } from "html-to-image";
 import { buildTopology, simulateRequest, suggestRequestInputs, type ConfigIssue, type IssueSeverity, type RequestSimulationInput, type RequestSimulationResult, type RequestRouteStep, type TopologyEdge, type TopologyGraph, type TopologyNode } from "./parser";
 import { sampleConfig } from "./sampleConfig";
@@ -10,6 +10,7 @@ import { LaneGroup } from "./components/LaneGroup";
 import { CodeEditor, type CodeEditorHandle } from "./components/CodeEditor";
 import { FlowEdge } from "./components/FlowEdge";
 import { toFlowElements } from "./graphLayout";
+import { fetchNodeConfig, fetchNodeIndex, type NodeIndexEntry } from "./nodeSource";
 import "./styles.css";
 
 const nodeTypes = { nginxNode: NginxNode, laneGroup: LaneGroup };
@@ -62,6 +63,10 @@ const copy = {
     showPanels: "Show side panels",
     focusWorkspace: "Fullscreen topology workspace",
     clearSelection: "Clear topology selection",
+    enterDetailMode: "Detail mode: lock node dragging",
+    exitDetailMode: "Exit detail mode",
+    detailModeEnabled: "Detail mode on. Node dragging is locked.",
+    detailModeDisabled: "Detail mode off. Nodes can be dragged.",
     updating: "Updating topology...",
     simulator: "Request route simulation",
     routeTrace: "Route trace",
@@ -107,7 +112,17 @@ const copy = {
     candidateCount: (count: number) => `${count} candidates`,
     incompleteResult: "Result is incomplete because the configuration contains parse errors.",
     source: "Source",
-    shortcutsHelp: "Shortcuts: / search · R request · F fit · Esc clear · [ ] issues · ? help"
+    nodeSource: "Collected nodes",
+    nodeSelect: "Select collected node",
+    nodePlaceholder: "Select a node…",
+    nodeRefresh: "Refresh collected node list",
+    nodeLoading: "Loading node configuration…",
+    nodeLoaded: (name: string) => `Loaded node ${name}`,
+    nodeLoadFailed: (name: string) => `Could not load ${name}.`,
+    nodeIndexFailed: "Could not read the collected node directory.",
+    nodeOriginLabel: "Collected node",
+    nodeOriginDescription: "Read-only snapshot collected from the node.",
+    shortcutsHelp: "Shortcuts: / search · R request · F fit · D detail mode · Esc clear · [ ] issues · ? help"
   },
   zh: {
     switchLanguage: "Switch to English",
@@ -146,6 +161,10 @@ const copy = {
     showPanels: "显示两侧面板",
     focusWorkspace: "拓扑工作区全屏",
     clearSelection: "清除拓扑选择",
+    enterDetailMode: "详情模式：锁定节点拖动",
+    exitDetailMode: "退出详情模式",
+    detailModeEnabled: "已进入详情模式，节点拖动已锁定。",
+    detailModeDisabled: "已退出详情模式，可拖动节点。",
     updating: "正在更新拓扑...",
     simulator: "请求路由模拟",
     routeTrace: "路由追踪",
@@ -191,7 +210,17 @@ const copy = {
     candidateCount: (count: number) => `${count} 个候选`,
     incompleteResult: "配置存在解析错误，当前结果不完整。",
     source: "来源",
-    shortcutsHelp: "快捷键：/ 搜索 · R 请求 · F 适配 · Esc 清除 · [ ] 问题 · ? 帮助"
+    nodeSource: "采集节点",
+    nodeSelect: "选择采集节点",
+    nodePlaceholder: "选择节点…",
+    nodeRefresh: "刷新采集节点列表",
+    nodeLoading: "正在加载节点配置…",
+    nodeLoaded: (name: string) => `已载入节点 ${name}`,
+    nodeLoadFailed: (name: string) => `无法加载节点 ${name}。`,
+    nodeIndexFailed: "无法读取采集目录。",
+    nodeOriginLabel: "采集节点配置",
+    nodeOriginDescription: "从节点采集的只读快照。",
+    shortcutsHelp: "快捷键：/ 搜索 · R 请求 · F 适配 · D 详情模式 · Esc 清除 · [ ] 问题 · ? 帮助"
   }
 } as const;
 
@@ -280,7 +309,10 @@ function Workspace() {
   const [selected, setSelected] = useState<TopologyNode | TopologyEdge | null>(null);
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
-  const [configOrigin, setConfigOrigin] = useState<"sample" | "session">("sample");
+  const [configOrigin, setConfigOrigin] = useState<"sample" | "session" | "node">("sample");
+  const [collectedNodes, setCollectedNodes] = useState<NodeIndexEntry[]>([]);
+  const [selectedNodeId, setSelectedNodeId] = useState("");
+  const [nodeLoading, setNodeLoading] = useState(false);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [layout, setLayout] = useState<Layout>("horizontal");
@@ -288,6 +320,7 @@ function Workspace() {
   const [exportingPng, setExportingPng] = useState(false);
   const [leftPanelWidth, setLeftPanelWidth] = useState(340);
   const [canvasFocused, setCanvasFocused] = useState(false);
+  const [detailMode, setDetailMode] = useState(false);
   const [simulationInput, setSimulationInput] = useState<RequestSimulationInput>({
     host: "",
     path: "/",
@@ -306,6 +339,11 @@ function Workspace() {
   const resizeStartRef = useRef<{ x: number; width: number } | null>(null);
   const { fitView } = useReactFlow();
   const text = copy[language];
+  const originCopy = configOrigin === "sample"
+    ? { label: text.sampleLabel, description: text.sampleDescription }
+    : configOrigin === "node"
+      ? { label: text.nodeOriginLabel, description: text.nodeOriginDescription }
+      : { label: text.sessionLabel, description: text.sessionDescription };
 
   const parsedConfig = useDebouncedValue(config, 180);
   const topologyQuery = useDebouncedValue(query, 120);
@@ -408,6 +446,65 @@ function Workspace() {
     setSelectedEdgeId(undefined);
   }, []);
 
+  const loadCollectedNode = useCallback(async (entry: NodeIndexEntry) => {
+    setNodeLoading(true);
+    const content = await fetchNodeConfig(entry);
+    setNodeLoading(false);
+    const displayName = entry.label || entry.id;
+    if (content === null) {
+      setStatusMessage(text.nodeLoadFailed(displayName));
+      return;
+    }
+    requestInputTouchedRef.current = false;
+    setConfig(content);
+    setConfigOrigin("node");
+    setSelected(null);
+    setSelectedId(undefined);
+    setSelectedEdgeId(undefined);
+    setStatusMessage(text.nodeLoaded(displayName));
+  }, [text.nodeLoadFailed, text.nodeLoaded]);
+
+  const loadCollectedNodeRef = useRef(loadCollectedNode);
+  useEffect(() => {
+    loadCollectedNodeRef.current = loadCollectedNode;
+  }, [loadCollectedNode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const index = await fetchNodeIndex();
+      if (cancelled || !index || index.nodes.length === 0) return;
+      setCollectedNodes(index.nodes);
+      const first = index.nodes[0];
+      setSelectedNodeId(first.id);
+      await loadCollectedNodeRef.current(first);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onCollectedNodeChange = useCallback((id: string) => {
+    setSelectedNodeId(id);
+    const entry = collectedNodes.find((node) => node.id === id);
+    if (entry) void loadCollectedNode(entry);
+  }, [collectedNodes, loadCollectedNode]);
+
+  const refreshCollectedNodes = useCallback(async () => {
+    const index = await fetchNodeIndex();
+    if (!index) {
+      setStatusMessage(text.nodeIndexFailed);
+      return;
+    }
+    setCollectedNodes(index.nodes);
+    const current = index.nodes.find((node) => node.id === selectedNodeId);
+    if (current) {
+      void loadCollectedNode(current);
+    } else {
+      setStatusMessage(language === "zh" ? `共 ${index.nodes.length} 个采集节点` : `${index.nodes.length} collected nodes`);
+    }
+  }, [language, loadCollectedNode, selectedNodeId, text.nodeIndexFailed]);
+
   const onNodeClick = (_: unknown, node: Node) => {
     if (node.type !== "nginxNode") return;
     setSelected(node.data as TopologyNode);
@@ -485,6 +582,14 @@ function Workspace() {
     setCanvasFocused((focused) => !focused);
     window.setTimeout(() => fitView({ padding: 0.12, duration: 260 }), 0);
   }, [fitView]);
+
+  const toggleDetailMode = useCallback(() => {
+    setDetailMode((enabled) => {
+      const next = !enabled;
+      setStatusMessage(next ? text.detailModeEnabled : text.detailModeDisabled);
+      return next;
+    });
+  }, [text.detailModeDisabled, text.detailModeEnabled]);
 
   const startPanelResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (leftCollapsed || canvasFocused || window.matchMedia("(max-width: 760px)").matches) return;
@@ -564,6 +669,9 @@ function Workspace() {
       } else if (event.key.toLowerCase() === "f") {
         event.preventDefault();
         fitView({ padding: 0.16, duration: 260 });
+      } else if (event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        toggleDetailMode();
       } else if (event.key === "[" || event.key === "]") {
         if (visibleIssues.length === 0) return;
         const direction = event.key === "]" ? 1 : -1;
@@ -575,7 +683,7 @@ function Workspace() {
     };
     document.addEventListener("keydown", onShortcut);
     return () => document.removeEventListener("keydown", onShortcut);
-  }, [fitView, focusIssue, text.shortcutsHelp, visibleIssues]);
+  }, [fitView, focusIssue, text.shortcutsHelp, toggleDetailMode, visibleIssues]);
 
   const onIssueKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>, issue: ConfigIssue) => {
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -658,7 +766,7 @@ function Workspace() {
           {leftCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
         </button>
 
-        <div className="panel-content" id="config-panel-content">
+        <div className={`panel-content ${collectedNodes.length > 0 ? "has-node-switcher" : ""}`} id="config-panel-content">
           <div className="panel-tools">
             <label className="icon-upload" title={text.uploadOutput}>
               <Upload size={17} />
@@ -683,6 +791,35 @@ function Workspace() {
               />
             </div>
           </div>
+
+          {collectedNodes.length > 0 && (
+            <div className="node-switcher" role="group" aria-label={text.nodeSource}>
+              <select
+                className="node-switcher__select"
+                aria-label={text.nodeSelect}
+                value={selectedNodeId}
+                disabled={nodeLoading}
+                onChange={(event) => onCollectedNodeChange(event.target.value)}
+              >
+                <option value="">{text.nodePlaceholder}</option>
+                {collectedNodes.map((node) => (
+                  <option key={node.id} value={node.id}>
+                    {node.label || node.id}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="panel-tool-button"
+                aria-label={text.nodeRefresh}
+                title={nodeLoading ? text.nodeLoading : text.nodeRefresh}
+                disabled={nodeLoading}
+                onClick={() => { void refreshCollectedNodes(); }}
+              >
+                <RefreshCw size={16} />
+              </button>
+            </div>
+          )}
 
           <div className="panel-meta">
             <div className="status-grid">
@@ -737,8 +874,8 @@ function Workspace() {
 
           <div className="config-textarea-area">
             <div className="config-origin" role="status">
-              <strong>{configOrigin === "sample" ? text.sampleLabel : text.sessionLabel}</strong>
-              <span>{configOrigin === "sample" ? text.sampleDescription : text.sessionDescription}</span>
+              <strong>{originCopy.label}</strong>
+              <span>{originCopy.description}</span>
             </div>
             <CodeEditor ref={editorRef} value={config} onChange={(value) => { setConfig(value); setConfigOrigin("session"); }} label={text.configuration} />
           </div>
@@ -755,7 +892,7 @@ function Workspace() {
         </div>
       </aside>
 
-      <main className="canvas" ref={flowRef} aria-label={text.topology} aria-busy={topologyUpdating}>
+      <main className={`canvas${detailMode ? " canvas-detail-mode" : ""}`} ref={flowRef} aria-label={text.topology} aria-busy={topologyUpdating}>
         <ReactFlow
           nodes={flowNodes}
           edges={elements.edges}
@@ -764,6 +901,9 @@ function Workspace() {
           fitView
           minZoom={0.15}
           maxZoom={1.8}
+          nodesDraggable={!detailMode}
+          nodesConnectable={false}
+          elementsSelectable
           onNodesChange={onNodesChange}
           onNodeClick={onNodeClick}
           onEdgeClick={onEdgeClick}
@@ -908,6 +1048,14 @@ function Workspace() {
               onClick={toggleCanvasFocus}
             >
               {canvasFocused ? <Minimize size={16} /> : <Maximize2 size={16} />}
+            </button>
+            <button
+              aria-label={detailMode ? text.exitDetailMode : text.enterDetailMode}
+              aria-pressed={detailMode}
+              title={detailMode ? text.exitDetailMode : text.enterDetailMode}
+              onClick={toggleDetailMode}
+            >
+              {detailMode ? <Lock size={16} /> : <Unlock size={16} />}
             </button>
             <button aria-label={text.clearSelection} title={text.clearSelection} onClick={() => { setSelected(null); setSelectedId(undefined); setSelectedEdgeId(undefined); structureKeyRef.current = ""; setFlowNodes(elements.nodes); }}>
               <RefreshCcw size={16} />

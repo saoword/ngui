@@ -19,9 +19,7 @@ export interface FlowHighlight {
 }
 
 const horizontalRankGap = 290;
-const horizontalNodeGap = 132;
 const verticalRankGap = 180;
-const verticalNodeGap = 250;
 const start = 80;
 const lanePaddingX = 28;
 const lanePaddingY = 26;
@@ -32,6 +30,17 @@ const groupNodeHeight = 78;
 const groupMinWidth = 320;
 const groupMinHeight = 148;
 const groupBoundsPadding = 18;
+
+const nodeStackGap = 44;
+const nodeInnerWidth = groupNodeWidth - 24;
+const nodeVerticalPadding = 20;
+const nodeToplineHeight = 16;
+const nodeLabelMarginTop = 8;
+const nodeLabelFontSize = 16;
+const nodeLabelLineHeight = 20;
+const nodeSubtitleMarginTop = 5;
+const nodeSubtitleFontSize = 12;
+const nodeSubtitleLineHeight = 17;
 
 export function toFlowElements(graph: TopologyGraph, query = "", selectedId?: string, layout: LayoutDirection = "horizontal", highlight: FlowHighlight = {}) {
   const lowerQuery = query.trim().toLowerCase();
@@ -79,16 +88,19 @@ function buildDefaultElements(
       buckets.set(rank, [node]);
     }
   });
-  const nodeIndexes = new Map<string, number>();
-  buckets.forEach((bucket) => bucket.forEach((node, index) => nodeIndexes.set(node.id, index)));
-  const maxBucketSize = Math.max(1, ...[...buckets.values()].map((bucket) => bucket.length));
-  const horizontalCenter = start + ((maxBucketSize - 1) * horizontalNodeGap) / 2;
-  const verticalCenter = start + ((maxBucketSize - 1) * verticalNodeGap) / 2;
+  const stacks = new Map<number, StackLayout>();
+  let maxStackSpan = 0;
+  buckets.forEach((bucket, rank) => {
+    const stack = buildStack(bucket);
+    stacks.set(rank, stack);
+    maxStackSpan = Math.max(maxStackSpan, stack.span);
+  });
+  const stackCenter = start + maxStackSpan / 2;
 
   const nodes: Node[] = graph.nodes.map((node) => {
     const rank = ranks[node.type];
-    const bucket = buckets.get(rank) || [];
-    const index = nodeIndexes.get(node.id) || 0;
+    const stack = stacks.get(rank) || buildStack([]);
+    const offset = stack.offsets.get(node.id) || 0;
     const matches = matchedNodeIds.has(node.id);
     const highlighted = highlightedNodeIds.has(node.id);
     const related = highlighted || (selectedId ? connected.has(node.id) : false);
@@ -101,10 +113,10 @@ function buildDefaultElements(
       position: layout === "horizontal"
         ? {
           x: start + rank * horizontalRankGap,
-          y: horizontalCenter - ((bucket.length - 1) * horizontalNodeGap) / 2 + index * horizontalNodeGap
+          y: stackCenter - stack.span / 2 + offset
         }
         : {
-          x: verticalCenter - ((bucket.length - 1) * verticalNodeGap) / 2 + index * verticalNodeGap,
+          x: stackCenter - stack.span / 2 + offset,
           y: start + rank * verticalRankGap
         },
       data: {
@@ -263,22 +275,29 @@ function buildServerGroupedElements(
       }
     });
 
-    const maxBucketSize = Math.max(1, ...[...buckets.values()].map((bucket) => bucket.length));
-    const horizontalCenter = lanePaddingY + laneHeaderHeight + ((maxBucketSize - 1) * horizontalNodeGap) / 2;
-    const verticalCenter = lanePaddingX + ((maxBucketSize - 1) * verticalNodeGap) / 2;
+    const stacks = new Map<number, StackLayout>();
+    let maxStackSpan = 0;
+    buckets.forEach((bucket, rank) => {
+      const stack = buildStack(bucket);
+      stacks.set(rank, stack);
+      maxStackSpan = Math.max(maxStackSpan, stack.span);
+    });
+    const stackCenter = lanePaddingY + laneHeaderHeight + maxStackSpan / 2;
+    const columnCenter = lanePaddingX + maxStackSpan / 2;
 
     const laneLayoutNodes = laneNodes.map((node) => {
       const rank = ranks[node.type];
-      const bucket = buckets.get(rank) || [];
-      const index = bucket.findIndex((item) => item.id === node.id);
+      const stack = stacks.get(rank) || buildStack([]);
+      const offset = stack.offsets.get(node.id) || 0;
 
       return {
         node,
+        height: estimateNodeHeight(node),
         x: layout === "horizontal"
           ? lanePaddingX + rank * horizontalRankGap
-          : verticalCenter - ((bucket.length - 1) * verticalNodeGap) / 2 + index * verticalNodeGap,
+          : columnCenter - stack.span / 2 + offset,
         y: layout === "horizontal"
-          ? horizontalCenter - ((bucket.length - 1) * horizontalNodeGap) / 2 + index * horizontalNodeGap
+          ? stackCenter - stack.span / 2 + offset
           : lanePaddingY + laneHeaderHeight + rank * verticalRankGap
       };
     });
@@ -436,7 +455,7 @@ function reachableEdgeIds(
   return visitedEdges;
 }
 
-function computeLaneBounds(nodes: Array<{ x: number; y: number }>) {
+function computeLaneBounds(nodes: Array<{ x: number; y: number; height: number }>) {
   if (nodes.length === 0) {
     return {
       minX: 0,
@@ -449,7 +468,7 @@ function computeLaneBounds(nodes: Array<{ x: number; y: number }>) {
   const minX = Math.min(...nodes.map((node) => node.x)) - groupBoundsPadding;
   const minY = 0;
   const maxX = Math.max(...nodes.map((node) => node.x + groupNodeWidth)) + groupBoundsPadding;
-  const maxY = Math.max(...nodes.map((node) => node.y + groupNodeHeight)) + groupBoundsPadding;
+  const maxY = Math.max(...nodes.map((node) => node.y + node.height)) + groupBoundsPadding;
 
   return {
     minX,
@@ -464,6 +483,47 @@ function summarizeEntries(entries: TopologyNode[]) {
   if (entries.length === 1) return entries[0].label;
   const preview = entries.slice(0, 2).map((entry) => entry.label).join(" | ");
   return entries.length > 2 ? `${preview} | +${entries.length - 2}` : preview;
+}
+
+interface StackLayout {
+  offsets: Map<string, number>;
+  span: number;
+}
+
+function buildStack(nodes: TopologyNode[]): StackLayout {
+  const offsets = new Map<string, number>();
+  let cursor = 0;
+  nodes.forEach((node) => {
+    offsets.set(node.id, cursor);
+    cursor += estimateNodeHeight(node) + nodeStackGap;
+  });
+  return { offsets, span: Math.max(groupNodeHeight, cursor - nodeStackGap) };
+}
+
+function estimateNodeHeight(node: TopologyNode) {
+  const labelLines = estimateLines(node.label, nodeLabelFontSize, nodeInnerWidth);
+  const subtitleLines = node.subtitle ? estimateLines(node.subtitle, nodeSubtitleFontSize, nodeInnerWidth) : 0;
+  const height = nodeVerticalPadding
+    + nodeToplineHeight
+    + nodeLabelMarginTop
+    + labelLines * nodeLabelLineHeight
+    + (node.subtitle ? nodeSubtitleMarginTop + subtitleLines * nodeSubtitleLineHeight : 0);
+  return Math.max(groupNodeHeight, height);
+}
+
+function estimateLines(text: string, fontSize: number, maxWidth: number) {
+  return text.split("\n").reduce((lines, segment) => {
+    return lines + Math.max(1, Math.ceil(estimateTextWidth(segment, fontSize) / maxWidth));
+  }, 0);
+}
+
+function estimateTextWidth(text: string, fontSize: number) {
+  let width = 0;
+  for (const char of text) {
+    const codePoint = char.codePointAt(0) || 0;
+    width += codePoint > 0x2e80 ? fontSize : fontSize * 0.56;
+  }
+  return width;
 }
 
 function searchable(node: TopologyNode) {
