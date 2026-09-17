@@ -46,8 +46,12 @@ _Avoid_: Configuration backup, live system snapshot
 Common `http` and `stream` routing concepts documented by the product, including servers, listeners, server names, locations, rewrites, returns, upstreams, common pass directives, and backend entries.
 _Avoid_: Full Nginx compatibility
 
+**Supported include resolution**:
+When the input is an `nginx -T` dump, `include` directives are resolved against the files captured by its `# configuration file <path>:` markers, so included locations, upstreams, and servers inherit the `http`/`stream` context of their include site. Configurations without those markers keep their includes unresolved.
+_Avoid_: Full include expansion for arbitrary configurations
+
 **Unsupported runtime behavior**:
-Lua, njs, third-party modules, complex dynamic behavior, include expansion, and other semantics that cannot be concluded reliably from the supplied text alone.
+Lua, njs, third-party modules, complex dynamic behavior, include expansion outside `nginx -T` file markers, and other semantics that cannot be concluded reliably from the supplied text alone.
 _Avoid_: Broken configuration
 
 ## Release language

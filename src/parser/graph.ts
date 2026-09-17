@@ -1,4 +1,5 @@
 import { analyzeNginxConfig } from "./analyzer";
+import { expandIncludes } from "./includes";
 import { isBlock, parseNginxConfig } from "./parser";
 import { buildRoutingModel, classifyLocation } from "./routing";
 import type { ConfigIssue, NginxBlock, NginxDirective, NginxNode, ParseError, TopologyEdge, TopologyGraph, TopologyNode } from "./types";
@@ -11,14 +12,15 @@ export function buildTopology(input: string): TopologyGraph {
 }
 
 export function buildTopologyFromAst(ast: NginxBlock, errors: ParseError[] = []): TopologyGraph {
+  const effective = expandIncludes(ast);
   const nodes = new Map<string, TopologyNode>();
   const edges = new Map<string, TopologyEdge>();
-  const issues = [...errors.map(parseErrorToIssue), ...analyzeNginxConfig(ast)];
-  const routing = buildRoutingModel(ast);
-  const upstreams = collectUpstreams(ast, nodes, edges);
-  const maps = collectMaps(ast, nodes);
+  const issues = dedupeIssues([...errors.map(parseErrorToIssue), ...analyzeNginxConfig(effective)]);
+  const routing = buildRoutingModel(effective);
+  const upstreams = collectUpstreams(effective, nodes, edges);
+  const maps = collectMaps(effective, nodes);
 
-  walk(ast, (node, parents) => {
+  walk(effective, (node, parents) => {
     if (!isBlock(node) || node.name !== "server") return;
     const context = nearestContext(parents);
     const serverId = addServer(node, context, nodes);
@@ -290,6 +292,16 @@ function hash(value: string) {
   let h = 0;
   for (let i = 0; i < value.length; i += 1) h = Math.imul(31, h) + value.charCodeAt(i) | 0;
   return Math.abs(h).toString(36);
+}
+
+function dedupeIssues(issues: ConfigIssue[]): ConfigIssue[] {
+  const seen = new Set<string>();
+  return issues.filter((issue) => {
+    const signature = `${issue.messageKey}|${issue.loc.file || ""}|${issue.loc.line}|${issue.loc.column}|${JSON.stringify(issue.params || {})}`;
+    if (seen.has(signature)) return false;
+    seen.add(signature);
+    return true;
+  });
 }
 
 function parseErrorToIssue(error: ParseError, index: number): ConfigIssue {
