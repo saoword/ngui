@@ -16,6 +16,7 @@ export interface FlowHighlight {
   nodeIds?: string[];
   edgeIds?: string[];
   active?: boolean;
+  serverId?: string;
 }
 
 const horizontalRankGap = 290;
@@ -32,6 +33,9 @@ const groupMinHeight = 148;
 const groupBoundsPadding = 18;
 
 const nodeStackGap = 44;
+const horizontalWrapGap = groupNodeWidth + nodeStackGap;
+const verticalWrapGap = groupNodeHeight + nodeStackGap;
+const maxStackSpan = 1300;
 const nodeInnerWidth = groupNodeWidth - 24;
 const nodeVerticalPadding = 20;
 const nodeToplineHeight = 16;
@@ -88,19 +92,16 @@ function buildDefaultElements(
       buckets.set(rank, [node]);
     }
   });
-  const stacks = new Map<number, StackLayout>();
-  let maxStackSpan = 0;
-  buckets.forEach((bucket, rank) => {
-    const stack = buildStack(bucket);
-    stacks.set(rank, stack);
-    maxStackSpan = Math.max(maxStackSpan, stack.span);
-  });
-  const stackCenter = start + maxStackSpan / 2;
+  const itemSize = layout === "horizontal" ? estimateNodeHeight : () => groupNodeWidth;
+  const rankGap = layout === "horizontal" ? horizontalRankGap : verticalRankGap;
+  const wrapGap = layout === "horizontal" ? horizontalWrapGap : verticalWrapGap;
+  const packed = packRanks(buckets, start, start, rankGap, wrapGap, itemSize);
+  const placements = new Map(packed.items.map((item) => [item.node.id, item]));
 
   const nodes: Node[] = graph.nodes.map((node) => {
-    const rank = ranks[node.type];
-    const stack = stacks.get(rank) || buildStack([]);
-    const offset = stack.offsets.get(node.id) || 0;
+    const placement = placements.get(node.id);
+    const primary = placement ? placement.primary : start;
+    const secondary = placement ? placement.secondary : start;
     const matches = matchedNodeIds.has(node.id);
     const highlighted = highlightedNodeIds.has(node.id);
     const related = highlighted || (selectedId ? connected.has(node.id) : false);
@@ -111,14 +112,8 @@ function buildDefaultElements(
       id: node.id,
       type: "nginxNode",
       position: layout === "horizontal"
-        ? {
-          x: start + rank * horizontalRankGap,
-          y: stackCenter - stack.span / 2 + offset
-        }
-        : {
-          x: stackCenter - stack.span / 2 + offset,
-          y: start + rank * verticalRankGap
-        },
+        ? { x: primary, y: secondary }
+        : { x: secondary, y: primary },
       data: {
         ...node,
         layout,
@@ -249,12 +244,11 @@ function buildServerGroupedElements(
   });
 
   const connectedLayoutIds = buildConnectedLayoutIds(graph.edges, laneSpecs, selectedId);
-  const flowNodes: Node[] = [];
-  const flowEdges: Edge[] = [];
-  let laneCursorX = start;
-  let laneCursorY = start;
+  const itemSize = layout === "horizontal" ? estimateNodeHeight : () => groupNodeWidth;
+  const rankGap = layout === "horizontal" ? horizontalRankGap : verticalRankGap;
+  const wrapGap = layout === "horizontal" ? horizontalWrapGap : verticalWrapGap;
 
-  laneSpecs.forEach((lane) => {
+  const laneFrames = laneSpecs.map((lane) => {
     const laneNodes = [...lane.nodeIds]
       .map((id) => nodesById.get(id))
       .filter((node): node is TopologyNode => Boolean(node))
@@ -275,36 +269,55 @@ function buildServerGroupedElements(
       }
     });
 
-    const stacks = new Map<number, StackLayout>();
-    let maxStackSpan = 0;
-    buckets.forEach((bucket, rank) => {
-      const stack = buildStack(bucket);
-      stacks.set(rank, stack);
-      maxStackSpan = Math.max(maxStackSpan, stack.span);
-    });
-    const stackCenter = lanePaddingY + laneHeaderHeight + maxStackSpan / 2;
-    const columnCenter = lanePaddingX + maxStackSpan / 2;
+    const packed = packRanks(buckets, lanePaddingX, lanePaddingY + laneHeaderHeight, rankGap, wrapGap, itemSize);
+    const laneLayoutNodes = packed.items.map((item) => ({
+      node: item.node,
+      x: layout === "horizontal" ? item.primary : item.secondary,
+      y: layout === "horizontal" ? item.secondary : item.primary,
+      width: layout === "horizontal" ? groupNodeWidth : item.size,
+      height: layout === "horizontal" ? item.size : estimateNodeHeight(item.node)
+    }));
 
-    const laneLayoutNodes = laneNodes.map((node) => {
-      const rank = ranks[node.type];
-      const stack = stacks.get(rank) || buildStack([]);
-      const offset = stack.offsets.get(node.id) || 0;
+    return { lane, bounds: computeLaneBounds(laneLayoutNodes), laneLayoutNodes };
+  });
 
-      return {
-        node,
-        height: estimateNodeHeight(node),
-        x: layout === "horizontal"
-          ? lanePaddingX + rank * horizontalRankGap
-          : columnCenter - stack.span / 2 + offset,
-        y: layout === "horizontal"
-          ? stackCenter - stack.span / 2 + offset
-          : lanePaddingY + laneHeaderHeight + rank * verticalRankGap
-      };
-    });
+  const columns = gridColumns(
+    laneFrames.length,
+    Math.max(groupMinWidth, ...laneFrames.map((frame) => frame.bounds.width)),
+    Math.max(groupMinHeight, ...laneFrames.map((frame) => frame.bounds.height)),
+    layout === "horizontal" ? 1.5 : 0.65
+  );
+  const columnWidths: number[] = [];
+  const rowHeights: number[] = [];
+  laneFrames.forEach((frame, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    columnWidths[column] = Math.max(columnWidths[column] || 0, frame.bounds.width);
+    rowHeights[row] = Math.max(rowHeights[row] || 0, frame.bounds.height);
+  });
+  const columnOffsets: number[] = [];
+  let cursor = start;
+  columnWidths.forEach((width, column) => {
+    columnOffsets[column] = cursor;
+    cursor += width + laneGap;
+  });
+  const rowOffsets: number[] = [];
+  cursor = start;
+  rowHeights.forEach((height, row) => {
+    rowOffsets[row] = cursor;
+    cursor += height + laneGap;
+  });
 
-    const bounds = computeLaneBounds(laneLayoutNodes);
-    const laneOffset = { x: laneCursorX, y: laneCursorY };
+  const flowNodes: Node[] = [];
+  const flowEdges: Edge[] = [];
+
+  laneFrames.forEach(({ lane, bounds, laneLayoutNodes }, index) => {
+    const laneOffset = {
+      x: columnOffsets[index % columns],
+      y: rowOffsets[Math.floor(index / columns)]
+    };
     const laneId = `server-group-${lane.server.id}`;
+    const laneHighlightActive = highlightActive && (!highlight.serverId || highlight.serverId === lane.server.id);
 
     flowNodes.push({
       id: laneId,
@@ -328,7 +341,7 @@ function buildServerGroupedElements(
     laneLayoutNodes.forEach(({ node, x, y }) => {
       const layoutId = `${lane.server.id}::${node.id}`;
       const matches = matchedNodeIds.has(node.id);
-      const highlighted = highlightedNodeIds.has(node.id);
+      const highlighted = laneHighlightActive && highlightedNodeIds.has(node.id);
       const related = highlighted || (selectedId ? connectedLayoutIds.has(layoutId) : false);
       const dimmedBySelection = Boolean(selectedId && !related && selectedId !== node.id);
       const dimmedByQuery = queryActive && !matches;
@@ -355,7 +368,7 @@ function buildServerGroupedElements(
     graph.edges.forEach((edge) => {
       if (!lane.edgeIds.has(edge.id) || !lane.nodeIds.has(edge.source) || !lane.nodeIds.has(edge.target)) return;
 
-      const highlighted = highlightedEdgeIds.has(edge.id);
+      const highlighted = laneHighlightActive && highlightedEdgeIds.has(edge.id);
       const selected = highlighted || Boolean(selectedId && (edge.source === selectedId || edge.target === selectedId));
       const matches = queryActive && (
         Boolean(edge.label?.toLowerCase().includes(lowerQuery))
@@ -381,12 +394,6 @@ function buildServerGroupedElements(
         }
       });
     });
-
-    if (layout === "horizontal") {
-      laneCursorY += bounds.height + laneGap;
-    } else {
-      laneCursorX += bounds.width + laneGap;
-    }
   });
 
   return { nodes: flowNodes, edges: flowEdges };
@@ -455,7 +462,7 @@ function reachableEdgeIds(
   return visitedEdges;
 }
 
-function computeLaneBounds(nodes: Array<{ x: number; y: number; height: number }>) {
+function computeLaneBounds(nodes: Array<{ x: number; y: number; width: number; height: number }>) {
   if (nodes.length === 0) {
     return {
       minX: 0,
@@ -467,7 +474,7 @@ function computeLaneBounds(nodes: Array<{ x: number; y: number; height: number }
 
   const minX = Math.min(...nodes.map((node) => node.x)) - groupBoundsPadding;
   const minY = 0;
-  const maxX = Math.max(...nodes.map((node) => node.x + groupNodeWidth)) + groupBoundsPadding;
+  const maxX = Math.max(...nodes.map((node) => node.x + node.width)) + groupBoundsPadding;
   const maxY = Math.max(...nodes.map((node) => node.y + node.height)) + groupBoundsPadding;
 
   return {
@@ -485,19 +492,76 @@ function summarizeEntries(entries: TopologyNode[]) {
   return entries.length > 2 ? `${preview} | +${entries.length - 2}` : preview;
 }
 
-interface StackLayout {
-  offsets: Map<string, number>;
-  span: number;
+interface PackedItem {
+  node: TopologyNode;
+  primary: number;
+  secondary: number;
+  size: number;
 }
 
-function buildStack(nodes: TopologyNode[]): StackLayout {
-  const offsets = new Map<string, number>();
-  let cursor = 0;
+interface StackChunk {
+  span: number;
+  items: Array<{ node: TopologyNode; offset: number; size: number }>;
+}
+
+function packStack(nodes: TopologyNode[], itemSize: (node: TopologyNode) => number): StackChunk[] {
+  const chunks: StackChunk[] = [];
+  let current: StackChunk = { span: 0, items: [] };
+
   nodes.forEach((node) => {
-    offsets.set(node.id, cursor);
-    cursor += estimateNodeHeight(node) + nodeStackGap;
+    const size = itemSize(node);
+    if (current.items.length > 0 && current.span + nodeStackGap + size > maxStackSpan) {
+      chunks.push(current);
+      current = { span: 0, items: [] };
+    }
+    const offset = current.items.length === 0 ? 0 : current.span + nodeStackGap;
+    current.items.push({ node, offset, size });
+    current.span = offset + size;
   });
-  return { offsets, span: Math.max(groupNodeHeight, cursor - nodeStackGap) };
+
+  if (current.items.length > 0) chunks.push(current);
+  return chunks;
+}
+
+function packRanks(
+  buckets: Map<number, TopologyNode[]>,
+  startPrimary: number,
+  padding: number,
+  rankGap: number,
+  wrapGap: number,
+  itemSize: (node: TopologyNode) => number
+) {
+  const packed = [...buckets.keys()]
+    .sort((left, right) => left - right)
+    .map((rank) => ({ chunks: packStack(buckets.get(rank) || [], itemSize) }));
+
+  let secondarySpan = 0;
+  packed.forEach(({ chunks }) => {
+    chunks.forEach((chunk) => {
+      secondarySpan = Math.max(secondarySpan, chunk.span);
+    });
+  });
+
+  const items: PackedItem[] = [];
+  let cursor = startPrimary;
+  packed.forEach(({ chunks }) => {
+    chunks.forEach((chunk, columnIndex) => {
+      const primary = cursor + columnIndex * wrapGap;
+      const secondary = padding + (secondarySpan - chunk.span) / 2;
+      chunk.items.forEach((item) => {
+        items.push({ node: item.node, primary, secondary: secondary + item.offset, size: item.size });
+      });
+    });
+    cursor += chunks.length * rankGap;
+  });
+
+  return { items };
+}
+
+function gridColumns(count: number, cellWidth: number, cellHeight: number, targetAspect: number) {
+  if (count <= 1) return 1;
+  const ideal = Math.sqrt((targetAspect * count * cellHeight) / Math.max(cellWidth, 1));
+  return Math.max(1, Math.min(count, Math.round(ideal)));
 }
 
 function estimateNodeHeight(node: TopologyNode) {

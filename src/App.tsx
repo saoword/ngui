@@ -9,6 +9,7 @@ import { NginxNode } from "./components/NginxNode";
 import { LaneGroup } from "./components/LaneGroup";
 import { CodeEditor, type CodeEditorHandle } from "./components/CodeEditor";
 import { FlowEdge } from "./components/FlowEdge";
+import { RequestSuggestionPicker } from "./components/RequestSuggestionPicker";
 import { toFlowElements } from "./graphLayout";
 import { fetchNodeConfig, fetchNodeIndex, type NodeIndexEntry } from "./nodeSource";
 import "./styles.css";
@@ -319,8 +320,8 @@ function Workspace() {
   const [statusMessage, setStatusMessage] = useState("");
   const [exportingPng, setExportingPng] = useState(false);
   const [leftPanelWidth, setLeftPanelWidth] = useState(340);
-  const [canvasFocused, setCanvasFocused] = useState(false);
-  const [detailMode, setDetailMode] = useState(false);
+  const [canvasFocused, setCanvasFocused] = useState(true);
+  const [detailMode, setDetailMode] = useState(true);
   const [simulationInput, setSimulationInput] = useState<RequestSimulationInput>({
     host: "",
     path: "/",
@@ -338,6 +339,8 @@ function Workspace() {
   const issueIndexRef = useRef(0);
   const resizeStartRef = useRef<{ x: number; width: number } | null>(null);
   const { fitView } = useReactFlow();
+  const fitViewRef = useRef(fitView);
+  fitViewRef.current = fitView;
   const text = copy[language];
   const originCopy = configOrigin === "sample"
     ? { label: text.sampleLabel, description: text.sampleDescription }
@@ -356,7 +359,7 @@ function Workspace() {
     [graph, simulationEnabled, simulationInput, text.simulationEmpty]
   );
   const elements = useMemo(
-    () => toFlowElements(graph, topologyQuery, selectedId, layout, { nodeIds: simulation.nodeIds, edgeIds: [...simulation.edgeIds, ...(selectedEdgeId ? [selectedEdgeId] : [])], active: simulationEnabled || Boolean(selectedEdgeId) }),
+    () => toFlowElements(graph, topologyQuery, selectedId, layout, { nodeIds: simulation.nodeIds, edgeIds: [...simulation.edgeIds, ...(selectedEdgeId ? [selectedEdgeId] : [])], active: simulationEnabled || Boolean(selectedEdgeId), serverId: simulation.serverId }),
     [graph, topologyQuery, selectedId, selectedEdgeId, layout, simulation, simulationEnabled]
   );
   const [flowNodes, setFlowNodes] = useState<Node[]>([]);
@@ -370,6 +373,7 @@ function Workspace() {
     if (key !== structureKeyRef.current) {
       structureKeyRef.current = key;
       setFlowNodes(elements.nodes);
+      window.setTimeout(() => fitViewRef.current({ padding: 0.16, duration: 300 }), 120);
     } else {
       setFlowNodes(prev => {
         const prevById = new Map(prev.map(n => [n.id, n]));
@@ -899,7 +903,7 @@ function Workspace() {
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           fitView
-          minZoom={0.15}
+          minZoom={0.05}
           maxZoom={1.8}
           nodesDraggable={!detailMode}
           nodesConnectable={false}
@@ -926,27 +930,16 @@ function Workspace() {
                 <span>{text.simulator}</span>
               </summary>
               <div className="simulator-fields">
-                <label className="request-suggestion">
-                  <span>{text.requestSuggestion}</span>
-                  <select
-                    aria-label={text.requestSuggestion}
-                    value=""
-                    onChange={(event) => {
-                      const suggestion = requestSuggestions.find((candidate) => JSON.stringify(candidate) === event.target.value);
-                      if (!suggestion) return;
-                      requestInputTouchedRef.current = true;
-                      setSimulationInput(suggestion);
-                      setSimulationPort(suggestion.port ? String(suggestion.port) : "");
-                    }}
-                  >
-                    <option value="">{text.requestSuggestionPlaceholder}</option>
-                    {requestSuggestions.map((suggestion) => (
-                      <option key={JSON.stringify(suggestion)} value={JSON.stringify(suggestion)}>
-                        {suggestion.host || "(any host)"}{suggestion.path} · {suggestion.scheme}:{suggestion.port}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <RequestSuggestionPicker
+                  suggestions={requestSuggestions}
+                  label={text.requestSuggestion}
+                  placeholder={text.requestSuggestionPlaceholder}
+                  onSelect={(suggestion) => {
+                    requestInputTouchedRef.current = true;
+                    setSimulationInput(suggestion);
+                    setSimulationPort(suggestion.port ? String(suggestion.port) : "");
+                  }}
+                />
                 <label>
                   <span>{text.host}</span>
                   <input

@@ -24,8 +24,13 @@ describe("App accessibility and interaction states", () => {
     vi.useRealTimers();
   });
 
+  const showPanels = () => {
+    fireEvent.click(screen.getByRole("button", { name: "显示两侧面板" }));
+  };
+
   it("provides names for configuration, search, upload, and icon actions", () => {
     render(<App />);
+    showPanels();
 
     expect(screen.getByRole("textbox", { name: "Nginx 配置" })).toBeInTheDocument();
     expect(screen.getByRole("searchbox", { name: "搜索拓扑" })).toBeInTheDocument();
@@ -45,6 +50,7 @@ describe("App accessibility and interaction states", () => {
 
   it("exposes the configuration panel expansion state", () => {
     render(<App />);
+    showPanels();
     const toggle = screen.getByRole("button", { name: "收起配置面板" });
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -55,6 +61,7 @@ describe("App accessibility and interaction states", () => {
   it("announces deferred topology updates while search settles", async () => {
     vi.useFakeTimers();
     render(<App />);
+    showPanels();
 
     fireEvent.change(screen.getByRole("searchbox", { name: "搜索拓扑" }), { target: { value: "api" } });
     expect(screen.getByText("正在更新拓扑...")).toHaveAttribute("role", "status");
@@ -66,35 +73,40 @@ describe("App accessibility and interaction states", () => {
     expect(screen.queryByText("正在更新拓扑...")).not.toBeInTheDocument();
   });
 
-  it("toggles the topology workspace focus mode", () => {
+  it("starts in a focused workspace and can show the side panels", () => {
     const { container } = render(<App />);
-    const focusButton = screen.getByRole("button", { name: "拓扑工作区全屏" });
+    const focusButton = screen.getByRole("button", { name: "显示两侧面板" });
+
+    expect(container.querySelector(".app-shell")).toHaveClass("canvas-focused");
+    expect(focusButton).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(focusButton);
-    expect(container.querySelector(".app-shell")).toHaveClass("canvas-focused");
-    expect(screen.getByRole("button", { name: "显示两侧面板" })).toHaveAttribute("aria-pressed", "true");
-
-    fireEvent.click(screen.getByRole("button", { name: "显示两侧面板" }));
     expect(container.querySelector(".app-shell")).not.toHaveClass("canvas-focused");
+    expect(screen.getByRole("button", { name: "拓扑工作区全屏" })).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "拓扑工作区全屏" }));
+    expect(container.querySelector(".app-shell")).toHaveClass("canvas-focused");
   });
 
-  it("toggles detail mode that locks node dragging", () => {
+  it("starts in detail mode that locks node dragging and can be exited", () => {
     const { container } = render(<App />);
-    const toggle = screen.getByRole("button", { name: "详情模式：锁定节点拖动" });
+    const toggle = screen.getByRole("button", { name: "退出详情模式" });
 
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(toggle);
-
-    expect(screen.getByRole("button", { name: "退出详情模式" })).toHaveAttribute("aria-pressed", "true");
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
     expect(container.querySelector(".canvas")).toHaveClass("canvas-detail-mode");
-    expect(screen.getByText("已进入详情模式，节点拖动已锁定。")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "退出详情模式" }));
+    fireEvent.click(toggle);
     expect(screen.getByRole("button", { name: "详情模式：锁定节点拖动" })).toHaveAttribute("aria-pressed", "false");
+    expect(container.querySelector(".canvas")).not.toHaveClass("canvas-detail-mode");
+    expect(screen.getByText("已退出详情模式，可拖动节点。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "详情模式：锁定节点拖动" }));
+    expect(screen.getByRole("button", { name: "退出详情模式" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("switches concise interface copy between Chinese and English", () => {
     render(<App />);
+    showPanels();
 
     fireEvent.click(screen.getByRole("button", { name: "Switch to English" }));
 
@@ -110,6 +122,7 @@ describe("App accessibility and interaction states", () => {
   it("shows unified issue count and Chinese issue messages", () => {
     vi.useFakeTimers();
     render(<App />);
+    showPanels();
 
     fireEvent.change(screen.getByRole("textbox", { name: "Nginx 配置" }), {
       target: { value: "http { server { listen 80; location / { proxy_pass http://missing_pool; } } }" }
@@ -126,6 +139,7 @@ describe("App accessibility and interaction states", () => {
   it("translates issue messages after switching to English", () => {
     vi.useFakeTimers();
     render(<App />);
+    showPanels();
 
     fireEvent.change(screen.getByRole("textbox", { name: "Nginx 配置" }), {
       target: { value: "http { server { listen 80; location / { proxy_pass http://missing_pool; } } }" }
@@ -142,6 +156,7 @@ describe("App accessibility and interaction states", () => {
   it("renders issues even when the config has only advisory checks", () => {
     vi.useFakeTimers();
     render(<App />);
+    showPanels();
 
     fireEvent.change(screen.getByRole("textbox", { name: "Nginx 配置" }), {
       target: { value: "http { server { listen 80; location /docs { add_header X-Test ok; } } }" }
@@ -158,6 +173,7 @@ describe("App accessibility and interaction states", () => {
   it("jumps to the matching config line when an issue is clicked", () => {
     vi.useFakeTimers();
     render(<App />);
+    showPanels();
 
     fireEvent.change(screen.getByRole("textbox", { name: "Nginx 配置" }), {
       target: { value: "events {}\nhttp { server { location /docs { add_header X-Test ok; } } }" }
@@ -185,6 +201,7 @@ describe("App accessibility and interaction states", () => {
   it("keeps issue line jump available after switching to English", () => {
     vi.useFakeTimers();
     render(<App />);
+    showPanels();
 
     fireEvent.change(screen.getByRole("textbox", { name: "Nginx 配置" }), {
       target: { value: "events {}\nhttp { server { location /docs { add_header X-Test ok; } } }" }
@@ -209,6 +226,7 @@ describe("App accessibility and interaction states", () => {
   it("keeps issue line and jump target exactly aligned when blank lines exist", () => {
     vi.useFakeTimers();
     render(<App />);
+    showPanels();
 
     fireEvent.change(screen.getByRole("textbox", { name: "Nginx 配置" }), {
       target: {
@@ -270,8 +288,25 @@ describe("App accessibility and interaction states", () => {
     expect(screen.getAllByText("输入端口后才能模拟请求路由。").length).toBeGreaterThan(0);
   });
 
+  it("searches request suggestions and applies the chosen route", () => {
+    render(<App />);
+
+    const picker = screen.getByRole("combobox", { name: "从配置选择请求" });
+    fireEvent.focus(picker);
+    fireEvent.change(picker, { target: { value: "grpc" } });
+
+    expect(screen.getByRole("option", { name: /example\.com\/grpc · http:80/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("option", { name: /example\.com\/grpc · http:80/ }));
+
+    expect((screen.getByRole("textbox", { name: "路径" }) as HTMLInputElement).value).toBe("/grpc");
+    expect((picker as HTMLInputElement).value).toBe("");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
   it("makes route trace steps actionable in the source editor", () => {
     render(<App />);
+    showPanels();
 
     const trace = document.querySelector(".route-trace");
     expect(trace).toBeInTheDocument();

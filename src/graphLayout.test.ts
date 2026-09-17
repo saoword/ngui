@@ -88,4 +88,68 @@ describe("topology search states", () => {
     expect(shortGap).toBeGreaterThanOrEqual(78);
     expect(longGap).toBeGreaterThan(shortGap);
   });
+
+  it("wraps a tall server stack into bounded columns", () => {
+    const nodes: TopologyGraph["nodes"] = [{ id: "server", type: "server", label: "example.com", details: [] }];
+    const edges: TopologyGraph["edges"] = [];
+    for (let index = 0; index < 40; index += 1) {
+      nodes.push({ id: `route-${index}`, type: "route", label: `location /p${index}`, subtitle: `prefix /p${index}`, details: [] });
+      edges.push({ id: `edge-${index}`, source: "server", target: `route-${index}`, type: "flow", label: "matches" });
+    }
+
+    const elements = toFlowElements({ nodes, edges, issues: [] });
+    const lane = elements.nodes.find((node) => node.type === "laneGroup");
+    expect(lane?.style?.height).toBeLessThan(1600);
+
+    const columns = new Set(elements.nodes.filter((node) => node.type === "nginxNode").map((node) => Math.round(node.position.x)));
+    expect(columns.size).toBeGreaterThan(3);
+  });
+
+  it("scopes simulation highlighting to the matched server lane", () => {
+    const sharedGraph: TopologyGraph = {
+      nodes: [
+        { id: "server-a", type: "server", label: "a.local", details: [] },
+        { id: "server-b", type: "server", label: "b.local", details: [] },
+        { id: "route-a", type: "route", label: "location /api", details: [] },
+        { id: "route-b", type: "route", label: "location /api", details: [] },
+        { id: "shared", type: "upstream", label: "shared_pool", details: [] }
+      ],
+      edges: [
+        { id: "a-route", source: "server-a", target: "route-a", type: "flow", label: "matches" },
+        { id: "b-route", source: "server-b", target: "route-b", type: "flow", label: "matches" },
+        { id: "a-up", source: "route-a", target: "shared", type: "flow", label: "proxy_pass" },
+        { id: "b-up", source: "route-b", target: "shared", type: "flow", label: "proxy_pass" }
+      ],
+      issues: []
+    };
+    const highlight = { nodeIds: ["server-a", "route-a", "shared"], edgeIds: ["a-route", "a-up"], active: true, serverId: "server-a" };
+
+    const scoped = toFlowElements(sharedGraph, "", undefined, "horizontal", highlight);
+    expect(scoped.nodes.find((node) => node.id === "server-a::shared")?.data?.dimmed).toBe(false);
+    expect(scoped.nodes.find((node) => node.id === "server-b::shared")?.data?.dimmed).toBe(true);
+    expect(scoped.edges.find((edge) => edge.id === "server-b::b-up")?.data?.dimmed).toBe(true);
+
+    const unscoped = toFlowElements(sharedGraph, "", undefined, "horizontal", { ...highlight, serverId: undefined });
+    expect(unscoped.nodes.find((node) => node.id === "server-b::shared")?.data?.dimmed).toBe(false);
+  });
+
+  it("lays server lanes out in a grid instead of one tall column", () => {
+    const nodes: TopologyGraph["nodes"] = [];
+    const edges: TopologyGraph["edges"] = [];
+    const serverCount = 16;
+    for (let server = 0; server < serverCount; server += 1) {
+      nodes.push({ id: `server-${server}`, type: "server", label: `s${server}.local`, details: [] });
+      for (let index = 0; index < 10; index += 1) {
+        nodes.push({ id: `route-${server}-${index}`, type: "route", label: `location /s${server}/p${index}`, subtitle: `prefix /s${server}/p${index}`, details: [] });
+        edges.push({ id: `edge-${server}-${index}`, source: `server-${server}`, target: `route-${server}-${index}`, type: "flow", label: "matches" });
+      }
+    }
+
+    const elements = toFlowElements({ nodes, edges, issues: [] });
+    const laneColumns = new Set(elements.nodes.filter((node) => node.type === "laneGroup").map((node) => node.position.x));
+    expect(laneColumns.size).toBeGreaterThan(1);
+
+    const maxY = Math.max(...elements.nodes.map((node) => node.position.y));
+    expect(maxY).toBeLessThan(serverCount * 1400);
+  });
 });

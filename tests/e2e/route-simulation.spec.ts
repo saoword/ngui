@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("traces an imported request and jumps from an issue to its source", async ({ page }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: /Show side panels|显示两侧面板/ }).click();
 
   const configuration = page.getByRole("textbox", { name: /Nginx configuration|Nginx 配置/ });
   await configuration.fill(`http {
